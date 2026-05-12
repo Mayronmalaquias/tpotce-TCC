@@ -1,6 +1,18 @@
-# Ignore data folder
+# dados gerados
 data/
 _data/
+
+# modelos treinados (arquivos grandes)
+ml/**/models/
+
+# python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.venv/
+venv/
+
+# sistema
 **/.DS_Store
 .idea
 install_tpot.log

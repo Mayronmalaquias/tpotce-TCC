@@ -1,0 +1,16 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+body {
+  @apply bg-surface-900 text-slate-100;
+  font-family: 'Inter', system-ui, sans-serif;
+}
+
+/* Scrollbar */
+::-webkit-scrollbar       { width: 6px; height: 6px; }
+::-webkit-scrollbar-track  { background: #1e293b; }
+::-webkit-scrollbar-thumb  { background: #475569; border-radius: 3px; }
+
+/* Leaflet z-index fix inside flex layouts */
+.leaflet-container { z-index: 0; }

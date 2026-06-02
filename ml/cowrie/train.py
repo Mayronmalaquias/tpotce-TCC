@@ -26,6 +26,8 @@ from sklearn.metrics import classification_report, confusion_matrix
 from sklearn.model_selection import StratifiedKFold, cross_val_score, train_test_split
 from sklearn.preprocessing import LabelEncoder
 
+from sklearn.svm import SVC
+
 try:
     from xgboost import XGBClassifier
     XGBOOST_AVAILABLE = True
@@ -132,7 +134,15 @@ def train(dataset_path: str, model_type: str = "rf", seed: int = 42) -> None:
     # ------------------------------------------------------------------
     _print_section(f"3/4  Treinamento  [{model_type}]")
 
-    if model_type == "xgboost":
+    if model_type == "svm":
+        model = SVC(
+            kernel="rbf",
+            C=10,
+            gamma="scale",
+            probability=True,
+            random_state=seed,
+        )
+    elif model_type == "xgboost":
         if not XGBOOST_AVAILABLE:
             print("ERRO: XGBoost nao instalado.", file=sys.stderr)
             print("  Instale com: pip install xgboost", file=sys.stderr)
@@ -244,7 +254,7 @@ if __name__ == "__main__":
         description="Treina classificador de ataques SSH/Telnet para o Cowrie"
     )
     parser.add_argument(
-        "--model", choices=["rf", "xgboost"], default="rf",
+        "--model", choices=["rf", "svm", "xgboost"], default="rf",
         help="Algoritmo: rf=Random Forest (padrao) | xgboost=XGBoost"
     )
     parser.add_argument(

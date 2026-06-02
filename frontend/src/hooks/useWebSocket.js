@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
 
-const WS_URL = `ws://${window.location.hostname}:8000/ws`
+const WS_URL = `ws://${window.location.host}/ws`
 
 export function useWebSocket(onMessage) {
   const [connected, setConnected] = useState(false)

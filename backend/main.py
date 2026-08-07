@@ -3,11 +3,12 @@ BeeIA — Backend principal (FastAPI).
 
 Endpoints REST:
   GET  /api/stats
-  GET  /api/attacks          ?limit &offset &attack_type
+  GET  /api/attacks          ?limit &offset &attack_type &honeypot
   GET  /api/attacks/chart    ?hours
   GET  /api/attacks/top-ips  ?limit
   GET  /api/geo
   GET  /api/blocked
+  GET  /api/report          ?hours (relatório em linguagem natural via LLM)
   POST /api/block/{ip}
   DEL  /api/block/{ip}
 
@@ -21,15 +22,18 @@ Iniciar:
 import asyncio
 import os
 from contextlib import asynccontextmanager
+from pathlib import Path
 from typing import Optional
 
-from fastapi import FastAPI, Query, WebSocket, WebSocketDisconnect
+from fastapi import FastAPI, HTTPException, Query, WebSocket, WebSocketDisconnect
 from fastapi.middleware.cors import CORSMiddleware
 
 import database
 import firewall
 import geo
-from classifier import classifier
+import llm
+from classifier import classifier as cowrie_classifier
+from dionaea_classifier import classifier as dionaea_classifier
 from log_watcher import LogWatcher
 
 # ── WebSocket manager ─────────────────────────────────────────────────────────
@@ -68,12 +72,39 @@ _event_loop: Optional[asyncio.AbstractEventLoop] = None
 AUTO_BLOCK_THRESHOLD = float(os.getenv("AUTO_BLOCK_THRESHOLD", "0.95"))
 
 
+def _finalize_attack(attack: dict, confidence: float):
+    """Persiste, transmite via WebSocket e aciona auto-bloqueio — comum a
+    qualquer honeypot (Cowrie ou Dionaea) após a classificação de uma sessão."""
+    database.insert_attack(attack)
+    src_ip = attack["src_ip"]
+    print(f"[Attack] {src_ip:<18} {attack['attack_type']:<22} "
+          f"conf={confidence:.0%}  [{attack['honeypot']}]")
+
+    if _event_loop and not _event_loop.is_closed():
+        asyncio.run_coroutine_threadsafe(
+            ws_manager.broadcast({"type": "new_attack", "data": attack}),
+            _event_loop,
+        )
+
+    if confidence >= AUTO_BLOCK_THRESHOLD and src_ip not in ("unknown", "127.0.0.1"):
+        ok, msg = firewall.block_ip(src_ip)
+        if ok:
+            database.block_ip(src_ip, reason=f"Auto ({attack['honeypot']}): {attack['attack_type']}")
+            print(f"[Firewall] Bloqueado {src_ip} — {msg}")
+            if _event_loop and not _event_loop.is_closed():
+                asyncio.run_coroutine_threadsafe(
+                    ws_manager.broadcast({"type": "ip_blocked", "data": {"ip": src_ip}}),
+                    _event_loop,
+                )
+
+
 def _on_session(session_id: str, events: list):
+    """Callback do LogWatcher do Cowrie — sessão SSH/Telnet encerrada."""
     connect_ev = next((e for e in events if e["eventid"] == "cowrie.session.connect"), None)
     src_ip     = connect_ev.get("src_ip", "unknown") if connect_ev else "unknown"
     timestamp  = connect_ev.get("timestamp", "")    if connect_ev else ""
 
-    result = classifier.predict(events)
+    result = cowrie_classifier.predict(events)
     if not result:
         return
 
@@ -82,6 +113,7 @@ def _on_session(session_id: str, events: list):
 
     attack = {
         "session_id":          session_id,
+        "honeypot":            "cowrie",
         "src_ip":              src_ip,
         "attack_type":         result["attack_type"],
         "confidence":          result["confidence"],
@@ -101,33 +133,64 @@ def _on_session(session_id: str, events: list):
         "blocked":             0,
     }
 
-    database.insert_attack(attack)
-    print(f"[Attack] {src_ip:<18} {result['attack_type']:<22} conf={result['confidence']:.0%}")
+    _finalize_attack(attack, result["confidence"])
 
-    # Broadcast via WebSocket
-    if _event_loop and not _event_loop.is_closed():
-        asyncio.run_coroutine_threadsafe(
-            ws_manager.broadcast({"type": "new_attack", "data": attack}),
-            _event_loop,
-        )
 
-    # Auto-bloqueio por confiança alta
-    if result["confidence"] >= AUTO_BLOCK_THRESHOLD and src_ip not in ("unknown", "127.0.0.1"):
-        ok, msg = firewall.block_ip(src_ip)
-        if ok:
-            database.block_ip(src_ip, reason=f"Auto: {result['attack_type']}")
-            print(f"[Firewall] Bloqueado {src_ip} — {msg}")
-            if _event_loop and not _event_loop.is_closed():
-                asyncio.run_coroutine_threadsafe(
-                    ws_manager.broadcast({"type": "ip_blocked", "data": {"ip": src_ip}}),
-                    _event_loop,
-                )
+def _on_dionaea_session(session_id: str, events: list):
+    """Callback do LogWatcher do Dionaea — janela de conexões de um IP encerrada."""
+    connect_evs = [e for e in events
+                   if e.get("eventid") in ("dionaea.connection.tcp.accept", "dionaea.connection.udp.accept")]
+    first     = connect_evs[0] if connect_evs else events[0]
+    src_ip    = first.get("src_ip", "unknown")
+    timestamp = first.get("timestamp", "")
+    protocols = [e.get("protocol") for e in connect_evs if e.get("protocol")]
+    protocol  = max(set(protocols), key=protocols.count) if protocols else None
+
+    result = dionaea_classifier.predict(events)
+    if not result:
+        return
+
+    feat     = result["features"]
+    location = geo.get_location(src_ip) or {}
+
+    attack = {
+        "session_id":          session_id,
+        "honeypot":            "dionaea",
+        "src_ip":              src_ip,
+        "attack_type":         result["attack_type"],
+        "confidence":          result["confidence"],
+        "timestamp":           timestamp,
+        "protocol":            protocol,
+        "connection_count":    feat["connection_count"],
+        "unique_ports":        feat["unique_ports"],
+        "has_shellcode":       feat["has_shellcode"],
+        "has_file_download":   feat["has_download"],
+        "session_duration_s":  feat["session_duration_s"],
+        "login_attempts":      feat["login_attempt_count"],
+        "country":             location.get("country"),
+        "city":                location.get("city"),
+        "latitude":            location.get("latitude"),
+        "longitude":           location.get("longitude"),
+        "blocked":             0,
+    }
+
+    _finalize_attack(attack, result["confidence"])
 
 
 # ── lifecycle ─────────────────────────────────────────────────────────────────
 
-log_path = os.getenv("COWRIE_LOG_PATH")
-watcher  = LogWatcher(on_session=_on_session, log_path=log_path)
+cowrie_watcher = LogWatcher(
+    on_session=_on_session,
+    log_path=os.getenv("COWRIE_LOG_PATH"),
+)
+dionaea_watcher = LogWatcher(
+    on_session=_on_dionaea_session,
+    log_path=os.getenv("DIONAEA_LOG_PATH"),
+    default_log=Path(__file__).parent.parent / "data" / "dionaea" / "log" / "dionaea.json",
+    session_end_events={"dionaea.connection.free"},
+    label="DionaeaWatcher",
+    thread_name="dionaea-watcher",
+)
 
 
 @asynccontextmanager
@@ -136,13 +199,19 @@ async def lifespan(app: FastAPI):
     _event_loop = asyncio.get_event_loop()
 
     database.init()
-    classifier.load()
-    watcher.start()
+    cowrie_classifier.load()
+    try:
+        dionaea_classifier.load()
+        dionaea_watcher.start()
+    except FileNotFoundError as e:
+        print(f"[BeeIA] Dionaea desabilitado: {e}")
+    cowrie_watcher.start()
     print("[BeeIA] Backend pronto.")
 
     yield
 
-    watcher.stop()
+    cowrie_watcher.stop()
+    dionaea_watcher.stop()
     print("[BeeIA] Backend encerrado.")
 
 
@@ -169,8 +238,9 @@ def attacks(
     limit:       int            = Query(50,   ge=1, le=200),
     offset:      int            = Query(0,    ge=0),
     attack_type: Optional[str]  = Query(None),
+    honeypot:    Optional[str]  = Query(None, description="cowrie | dionaea"),
 ):
-    return database.get_attacks(limit=limit, offset=offset, attack_type=attack_type)
+    return database.get_attacks(limit=limit, offset=offset, attack_type=attack_type, honeypot=honeypot)
 
 
 @app.get("/api/attacks/chart")
@@ -191,6 +261,18 @@ def geo_data():
 @app.get("/api/blocked")
 def blocked():
     return database.get_blocked_ips()
+
+
+@app.get("/api/report")
+def report(hours: int = Query(24, ge=1, le=168)):
+    data = database.get_report_data(hours=hours)
+    try:
+        text = llm.generate_report(data)
+    except RuntimeError as e:
+        raise HTTPException(status_code=503, detail=str(e))
+    except Exception as e:
+        raise HTTPException(status_code=502, detail=f"Erro ao gerar relatório: {e}")
+    return {"report": text, "data": data}
 
 
 @app.post("/api/block/{ip}")

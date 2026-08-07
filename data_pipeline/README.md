@@ -1,11 +1,13 @@
 # data_pipeline — Geração e Processamento de Dados
 
-Este módulo é responsável por criar o dataset de treinamento do modelo de ML.
-Funciona com **dados sintéticos** (para treino inicial) e com **logs reais** do Cowrie (para retreinamento).
+Este módulo é responsável por criar os datasets de treinamento dos modelos de ML — um por honeypot.
+Funciona com **dados sintéticos** (para treino inicial) e com **logs reais** do Cowrie/Dionaea (para retreinamento).
 
 ---
 
 ## Arquivos
+
+### Cowrie (SSH/Telnet)
 
 | Arquivo | O que faz |
 |---|---|
@@ -13,7 +15,22 @@ Funciona com **dados sintéticos** (para treino inicial) e com **logs reais** do
 | `extract_features.py` | Lê um arquivo JSONL, agrupa por sessão e extrai 13 features numéricas |
 | `build_dataset.py` | Orquestra os dois passos acima em um único comando |
 
-> Nenhuma dependência externa — usa apenas Python stdlib (`json`, `re`, `csv`, `datetime`).
+### Dionaea (SMB/FTP/MSSQL/MQTT/...)
+
+| Arquivo | O que faz |
+|---|---|
+| `generate_dionaea_logs.py` | Gera sessões sintéticas no formato normalizado do Dionaea (JSONL) — ver nota sobre agrupamento de sessão no próprio arquivo |
+| `extract_dionaea_features.py` | Lê um arquivo JSONL, agrupa por sessão e extrai 10 features numéricas |
+| `build_dionaea_dataset.py` | Orquestra os dois passos acima em um único comando |
+
+```bash
+cd data_pipeline
+python build_dionaea_dataset.py            # 500 sessões por classe (padrão)
+```
+
+Saída em `../data/dataset/`: `dionaea_logs.jsonl`, `dionaea_session_labels.csv`, `dionaea_training_features.csv`. Detalhes das 10 features e das 4 classes em [`ml/dionaea/README.md`](../ml/dionaea/README.md).
+
+> Nenhuma dependência externa — usa apenas Python stdlib (`json`, `re`, `csv`, `datetime`, `statistics`).
 
 ---
 

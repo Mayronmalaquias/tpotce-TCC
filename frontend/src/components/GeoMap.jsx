@@ -5,6 +5,9 @@ const COLORS = {
   command_injection: '#f97316',
   malware_download:  '#a855f7',
   recon:             '#3b82f6',
+  port_scan:         '#14b8a6',
+  service_probe:     '#eab308',
+  exploit_attempt:   '#ec4899',
 }
 
 const LABELS = {
@@ -12,7 +15,12 @@ const LABELS = {
   command_injection: 'Cmd Injection',
   malware_download:  'Malware Download',
   recon:             'Reconhecimento',
+  port_scan:         'Port Scan',
+  service_probe:     'Probe de Serviço',
+  exploit_attempt:   'Tentativa de Exploit',
 }
+
+const HONEYPOT_LABELS = { cowrie: 'Cowrie', dionaea: 'Dionaea' }
 
 export default function GeoMap({ geoData = [] }) {
   const points = geoData.filter(p => p.latitude && p.longitude)
@@ -51,6 +59,7 @@ export default function GeoMap({ geoData = [] }) {
             <Popup>
               <div className="text-xs leading-relaxed" style={{ minWidth: 160 }}>
                 <p><strong>IP:</strong> {p.src_ip}</p>
+                <p><strong>Honeypot:</strong> {HONEYPOT_LABELS[p.honeypot] ?? p.honeypot ?? 'Cowrie'}</p>
                 <p><strong>Local:</strong> {[p.city, p.country].filter(Boolean).join(', ') || '—'}</p>
                 <p><strong>Tipo:</strong> {LABELS[p.attack_type] ?? p.attack_type}</p>
                 <p><strong>Ataques:</strong> {p.count}</p>

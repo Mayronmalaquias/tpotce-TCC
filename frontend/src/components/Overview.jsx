@@ -5,6 +5,9 @@ const ATTACK_LABELS = {
   command_injection: 'Cmd Injection',
   malware_download:  'Malware Download',
   recon:             'Reconhecimento',
+  port_scan:         'Port Scan',
+  service_probe:     'Probe de Serviço',
+  exploit_attempt:   'Tentativa de Exploit',
   none:              '—',
 }
 
@@ -13,6 +16,9 @@ const ATTACK_COLORS = {
   command_injection: 'text-orange-400',
   malware_download:  'text-purple-400',
   recon:             'text-blue-400',
+  port_scan:         'text-teal-400',
+  service_probe:     'text-yellow-400',
+  exploit_attempt:   'text-pink-400',
   none:              'text-slate-400',
 }
 

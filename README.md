@@ -8,10 +8,11 @@ Orientador: Prof. Pablo Coelho Ferreira
 
 ## O que é este projeto
 
-O BeeIA é um sistema de monitoramento de ameaças cibernéticas que combina três tecnologias:
+O BeeIA é um sistema de monitoramento de ameaças cibernéticas que combina quatro tecnologias:
 
-- **Honeypot Cowrie** — isca de rede que atrai e registra ataques reais de SSH/Telnet
-- **Machine Learning** — classifica cada sessão de ataque automaticamente por tipo e criticidade
+- **Honeypots Cowrie e Dionaea** — iscas de rede que atraem e registram ataques reais: Cowrie (SSH/Telnet) e Dionaea (SMB/FTP/MSSQL/MQTT e outros serviços vulneráveis emulados, foco em captura de malware)
+- **Machine Learning** — classifica cada sessão de ataque automaticamente por tipo e criticidade (um modelo por honeypot, com features específicas para cada tipo de tráfego)
+- **LLM** — gera relatórios em linguagem natural (sumário executivo, análise técnica, recomendações) a partir dos dados agregados
 - **Dashboard em tempo real** — exibe ataques, gráficos e mapa geográfico conforme chegam
 
 ---
@@ -43,23 +44,26 @@ O BeeIA é um sistema de monitoramento de ameaças cibernéticas que combina tr�
 ┌──────────────────────────────────────────────────────────────────────┐
 │  PRODUÇÃO (tempo real — após docker compose up)                      │
 │                                                                      │
-│  Cowrie (container Docker)                                           │
-│       │  detecta conexão SSH/Telnet → escreve eventos em:           │
-│       ↓                                                              │
-│  data/cowrie/log/cowrie.json   (volume compartilhado)               │
-│       │                                                              │
-│       ↓  (tail contínuo do arquivo)                                  │
-│  backend/log_watcher.py                                              │
+│  Cowrie (container)          Dionaea (container)                    │
+│       │  SSH/Telnet               │  SMB/FTP/MSSQL/MQTT/...         │
+│       ↓                           ↓                                  │
+│  data/cowrie/log/cowrie.json   data/dionaea/log/dionaea.json        │
+│       │                           │       (volumes compartilhados)  │
+│       ↓ tail contínuo             ↓ tail contínuo                    │
+│  backend/log_watcher.py (Cowrie watcher + Dionaea watcher)          │
 │       │  agrupa eventos por session_id                               │
-│       │  ao receber cowrie.session.closed → dispara classificação    │
+│       │  evento de fim de sessão → dispara classificação             │
 │       ↓                                                              │
-│  backend/classifier.py                                               │
-│       │  extrai as mesmas 13 features                                │
-│       │  carrega cowrie_rf.joblib → predict_proba                    │
-│       ↓                                                              │
+│  backend/classifier.py         backend/dionaea_classifier.py        │
+│       │  13 features               │  10 features                   │
+│       │  cowrie_rf.joblib          │  dionaea_rf.joblib              │
+│       ↓                           ↓                                  │
+│       └──────────┬────────────────┘                                  │
+│                   ↓                                                  │
 │       ├──→ backend/database.py    salva no SQLite (data/beeia.db)   │
 │       ├──→ backend/geo.py         geolocaliza o IP (ip-api.com)     │
 │       ├──→ backend/firewall.py    bloqueia IPs (confiança ≥ 95%)    │
+│       ├──→ backend/llm.py         gera relatório sob demanda        │
 │       └──→ WebSocket              transmite para o dashboard         │
 │                                           │                          │
 │                                           ↓                          │
@@ -67,7 +71,8 @@ O BeeIA é um sistema de monitoramento de ameaças cibernéticas que combina tr�
 │                                   ├── cards de métricas              │
 │                                   ├── feed de ataques ao vivo        │
 │                                   ├── gráficos (barras + donut)      │
-│                                   └── mapa geográfico (Leaflet)      │
+│                                   ├── mapa geográfico (Leaflet)      │
+│                                   └── relatório em linguagem natural │
 └──────────────────────────────────────────────────────────────────────┘
 ```
 
@@ -81,25 +86,35 @@ beeia/
 │   ├── cowrie/                #   Honeypot SSH/Telnet
 │   ├── nginx/                 #   Proxy reverso
 │   └── tpotinit/              #   Inicialização do ambiente
+│                               #   (dionaea usa a imagem oficial do T-Pot direto no compose)
 │
 ├── data_pipeline/             # Geração e processamento de dados para treino
-│   ├── generate_logs.py       #   Gera logs sintéticos no formato Cowrie
-│   ├── extract_features.py    #   Extrai features por sessão (JSONL → CSV)
-│   └── build_dataset.py       #   Orquestra os dois passos acima
+│   ├── generate_logs.py               #   Gera logs sintéticos no formato Cowrie
+│   ├── extract_features.py            #   Extrai features por sessão do Cowrie (JSONL → CSV)
+│   ├── build_dataset.py               #   Orquestra os dois passos acima (Cowrie)
+│   ├── generate_dionaea_logs.py       #   Gera logs sintéticos no formato Dionaea
+│   ├── extract_dionaea_features.py    #   Extrai features por sessão do Dionaea (JSONL → CSV)
+│   └── build_dionaea_dataset.py       #   Orquestra os dois passos acima (Dionaea)
 │
 ├── ml/
-│   └── cowrie/                # Modelo ML específico do Cowrie
-│       ├── train.py           #   Treina o classificador (RF ou XGBoost)
+│   ├── cowrie/                # Modelo ML específico do Cowrie (13 features)
+│   │   ├── train.py           #   Treina o classificador (RF, SVM ou XGBoost)
+│   │   ├── requirements.txt
+│   │   └── models/            #   Modelos salvos (gitignored)
+│   └── dionaea/                # Modelo ML específico do Dionaea (10 features)
+│       ├── train.py
 │       ├── requirements.txt
 │       └── models/            #   Modelos salvos (gitignored)
 │
 ├── backend/                   # API FastAPI
 │   ├── main.py                #   App principal, rotas REST, WebSocket
-│   ├── classifier.py          #   Carrega modelo e classifica sessões
-│   ├── log_watcher.py         #   Monitora cowrie.json em tempo real
-│   ├── database.py            #   SQLite — ataques e IPs bloqueados
+│   ├── classifier.py          #   Carrega modelo do Cowrie e classifica sessões
+│   ├── dionaea_classifier.py  #   Carrega modelo do Dionaea e classifica sessões
+│   ├── log_watcher.py         #   Monitora logs em tempo real (genérico, um por honeypot)
+│   ├── database.py            #   SQLite — ataques (Cowrie + Dionaea) e IPs bloqueados
 │   ├── firewall.py            #   Bloqueia IPs (iptables / netsh)
 │   ├── geo.py                 #   Geolocalização de IPs
+│   ├── llm.py                 #   Relatórios em linguagem natural (API Anthropic)
 │   └── requirements.txt
 │
 ├── frontend/                  # Dashboard React + Vite
@@ -109,19 +124,21 @@ beeia/
 │       │   ├── Overview.jsx   #   Cards de métricas
 │       │   ├── AttackFeed.jsx #   Feed de ataques em tempo real
 │       │   ├── Charts.jsx     #   Gráficos (Recharts)
-│       │   └── GeoMap.jsx     #   Mapa geográfico (Leaflet)
+│       │   ├── GeoMap.jsx     #   Mapa geográfico (Leaflet)
+│       │   └── Report.jsx     #   Relatório em linguagem natural (LLM)
 │       └── hooks/
 │           └── useWebSocket.js
 │
 ├── data/                      # Dados gerados (gitignored)
 │   ├── cowrie/log/            #   Logs brutos do Cowrie
+│   ├── dionaea/log/           #   Logs brutos do Dionaea
 │   ├── dataset/               #   CSVs de treino
 │   └── beeia.db               #   Banco SQLite de ataques
 │
 ├── md-usotcc/                 # Tutoriais de uso
 ├── docker-compose.yml
-└── .env
-```
+├── .env                        # Não versionado — copie de .env.example
+└── .env.example
 
 ---
 
@@ -143,25 +160,25 @@ beeia/
 
 ```bash
 cd data_pipeline
-python build_dataset.py --sessions 500
+python build_dataset.py --sessions 500          # Cowrie
+python build_dionaea_dataset.py --sessions 500  # Dionaea
 ```
 
 Isso cria em `data/dataset/`:
-- `cowrie_logs.jsonl` — 2000 sessões sintéticas
-- `session_labels.csv` — rótulos por sessão
-- `training_features.csv` — 13 features por sessão, pronto para treino
+- `cowrie_logs.jsonl` / `dionaea_logs.jsonl` — sessões sintéticas por honeypot
+- `session_labels.csv` / `dionaea_session_labels.csv` — rótulos por sessão
+- `training_features.csv` (13 features) / `dionaea_training_features.csv` (10 features)
 
-### Passo 2 — Treinar o modelo de ML
+### Passo 2 — Treinar os modelos de ML
 
 ```bash
-cd ml/cowrie
-pip install -r requirements.txt
-python train.py
+cd ml/cowrie   && pip install -r requirements.txt && python train.py
+cd ../dionaea  && pip install -r requirements.txt && python train.py
 ```
 
-Gera `ml/cowrie/models/cowrie_rf.joblib` com as métricas de acurácia.
+Gera `ml/cowrie/models/cowrie_rf.joblib` e `ml/dionaea/models/dionaea_rf.joblib` com as métricas de acurácia. **O modelo do Dionaea é opcional** — se ausente, o backend sobe normalmente só com o Cowrie ativo.
 
-### Passo 3 — Subir o Honeypot Cowrie
+### Passo 3 — Subir os Honeypots
 
 ```bash
 # Configure as credenciais de acesso web no .env
@@ -170,7 +187,7 @@ Gera `ml/cowrie/models/cowrie_rf.joblib` com as métricas de acurácia.
 docker compose up -d
 ```
 
-O Cowrie começa a escutar na porta 22 (SSH) e 23 (Telnet).
+O Cowrie começa a escutar nas portas 22 (SSH) e 23 (Telnet); o Dionaea nas portas dos serviços emulados (21, 445, 1433, 1883, 3306, entre outras — ver `docker-compose.yml`).
 
 ### Passo 4 — Iniciar o Backend
 
@@ -194,18 +211,19 @@ Acesse `http://localhost:5173`.
 
 ## Retreinamento com dados reais
 
-Após o Cowrie coletar ataques reais, é possível retreinar o modelo com dados autênticos:
+Após os honeypots coletarem ataques reais, é possível retreinar os modelos com dados autênticos (mesmo fluxo para os dois):
 
 ```bash
-# 1. Extrair features dos logs reais do Cowrie
+# 1. Extrair features dos logs reais
 cd data_pipeline
-python extract_features.py  # lê data/cowrie/log/cowrie.json
+python extract_features.py          # lê data/cowrie/log/cowrie.json
+python extract_dionaea_features.py  # lê data/dionaea/log/dionaea.json
 
 # 2. Revisar/rotular os dados (opcional — modelo pode usar pseudo-labels)
 
 # 3. Retreinar
-cd ml/cowrie
-python train.py --dataset ../../data/dataset/real_features.csv
+cd ml/cowrie  && python train.py --dataset ../../data/dataset/real_features.csv
+cd ../dionaea && python train.py --dataset ../../data/dataset/dionaea_real_features.csv
 ```
 
 ---
@@ -216,8 +234,10 @@ python train.py --dataset ../../data/dataset/real_features.csv
 |---|---|
 | Pipeline de dados | [data_pipeline/README.md](data_pipeline/README.md) |
 | Modelo ML (Cowrie) | [ml/cowrie/README.md](ml/cowrie/README.md) |
+| Modelo ML (Dionaea) | [ml/dionaea/README.md](ml/dionaea/README.md) |
 | Backend (API) | [backend/README.md](backend/README.md) |
 | Frontend (Dashboard) | [frontend/README.md](frontend/README.md) |
+| Documentação por processo | [Docs/Process/](Docs/Process/README.md) |
 
 ---
 
@@ -225,9 +245,10 @@ python train.py --dataset ../../data/dataset/real_features.csv
 
 | Camada | Tecnologias |
 |---|---|
-| Honeypot | Cowrie 2.x, Docker |
+| Honeypots | Cowrie 2.x (SSH/Telnet), Dionaea (SMB/FTP/MSSQL/MQTT/...), Docker |
 | Data Pipeline | Python (stdlib) |
-| Machine Learning | scikit-learn (Random Forest), XGBoost |
+| Machine Learning | scikit-learn (Random Forest, SVM), XGBoost — um modelo por honeypot |
+| LLM | API Anthropic (Claude) — relatórios em linguagem natural |
 | Backend | FastAPI, SQLite, WebSocket |
 | Frontend | React 18, Vite, Tailwind CSS, Recharts, Leaflet |
 

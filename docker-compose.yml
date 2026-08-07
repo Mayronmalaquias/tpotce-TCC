@@ -1,5 +1,6 @@
 networks:
   cowrie_local:
+  dionaea_local:
   nginx_local:
   ewsposter_local:
 
@@ -55,6 +56,47 @@ services:
       - ${TPOT_DATA_PATH}/cowrie/keys:/home/cowrie/cowrie/etc
       - ${TPOT_DATA_PATH}/cowrie/log:/home/cowrie/cowrie/log
       - ${TPOT_DATA_PATH}/cowrie/log/tty:/home/cowrie/cowrie/log/tty
+
+# Dionaea service (captura de malware — SMB/FTP/MSSQL/MQTT/TFTP/...)
+# Config de portas/volumes segue o padrão conhecido do T-Pot CE para o Dionaea;
+# ajuste se divergir da imagem publicada em ${TPOT_REPO}/dionaea.
+  dionaea:
+    container_name: dionaea
+    restart: always
+    depends_on:
+      tpotinit:
+        condition: service_healthy
+    tmpfs:
+      - /tmp/dionaea:uid=2000,gid=2000
+    cap_add:
+      - NET_ADMIN
+    networks:
+      - dionaea_local
+    ports:
+      - "21:21"          # FTP
+      - "42:42"           # WINS
+      - "69:69/udp"       # TFTP
+      - "135:135"         # MSRPC
+      - "443:443"         # HTTPS
+      - "445:445"         # SMB
+      - "1433:1433"       # MSSQL
+      - "1723:1723"       # PPTP
+      - "1883:1883"       # MQTT
+      - "3306:3306"       # MySQL
+      - "5060:5060"       # SIP (TCP)
+      - "5060:5060/udp"   # SIP (UDP)
+      - "27017:27017"     # MongoDB
+    image: ${TPOT_REPO}/dionaea:${TPOT_VERSION}
+    pull_policy: ${TPOT_PULL_POLICY}
+    read_only: true
+    volumes:
+      - ${TPOT_DATA_PATH}/dionaea/roots/ftp:/opt/dionaea/var/dionaea/roots/ftp
+      - ${TPOT_DATA_PATH}/dionaea/roots/tftp:/opt/dionaea/var/dionaea/roots/tftp
+      - ${TPOT_DATA_PATH}/dionaea/roots/www:/opt/dionaea/var/dionaea/roots/www
+      - ${TPOT_DATA_PATH}/dionaea/roots/upload:/opt/dionaea/var/dionaea/roots/upload
+      - ${TPOT_DATA_PATH}/dionaea/binaries:/opt/dionaea/var/dionaea/binaries
+      - ${TPOT_DATA_PATH}/dionaea/log:/opt/dionaea/var/log
+      - ${TPOT_DATA_PATH}/dionaea/rtp:/opt/dionaea/var/dionaea/rtp
 
 ##################
 #### Ferramentas de Log (Opcional, mas recomendado para ver os ataques)

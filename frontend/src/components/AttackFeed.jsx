@@ -6,6 +6,9 @@ const TYPE_STYLES = {
   command_injection: 'bg-orange-900/50 text-orange-300 border-orange-700',
   malware_download:  'bg-purple-900/50 text-purple-300 border-purple-700',
   recon:             'bg-blue-900/50 text-blue-300 border-blue-700',
+  port_scan:         'bg-teal-900/50 text-teal-300 border-teal-700',
+  service_probe:     'bg-yellow-900/50 text-yellow-300 border-yellow-700',
+  exploit_attempt:   'bg-pink-900/50 text-pink-300 border-pink-700',
 }
 
 const TYPE_LABELS = {
@@ -13,12 +16,34 @@ const TYPE_LABELS = {
   command_injection: 'Cmd Injection',
   malware_download:  'Malware DL',
   recon:             'Recon',
+  port_scan:         'Port Scan',
+  service_probe:     'Probe',
+  exploit_attempt:   'Exploit',
+}
+
+const HONEYPOT_STYLES = {
+  cowrie:  'bg-cyan-900/40 text-cyan-300 border-cyan-700',
+  dionaea: 'bg-amber-900/40 text-amber-300 border-amber-700',
+}
+
+const HONEYPOT_LABELS = {
+  cowrie:  'Cowrie',
+  dionaea: 'Dionaea',
 }
 
 function Badge({ type }) {
   return (
     <span className={`text-xs px-2 py-0.5 rounded border font-medium ${TYPE_STYLES[type] ?? 'bg-slate-700 text-slate-300 border-slate-600'}`}>
       {TYPE_LABELS[type] ?? type}
+    </span>
+  )
+}
+
+function HoneypotBadge({ honeypot }) {
+  const hp = honeypot || 'cowrie'
+  return (
+    <span className={`text-xs px-2 py-0.5 rounded border font-medium ${HONEYPOT_STYLES[hp] ?? 'bg-slate-700 text-slate-300 border-slate-600'}`}>
+      {HONEYPOT_LABELS[hp] ?? hp}
     </span>
   )
 }
@@ -63,6 +88,7 @@ export default function AttackFeed({ attacks, onBlock }) {
             <thead className="sticky top-0 bg-surface-800 border-b border-surface-700">
               <tr className="text-xs text-slate-500 uppercase tracking-wider">
                 <th className="px-4 py-2 text-left">IP Origem</th>
+                <th className="px-4 py-2 text-left">Honeypot</th>
                 <th className="px-4 py-2 text-left">Tipo</th>
                 <th className="px-4 py-2 text-left">Confiança</th>
                 <th className="px-4 py-2 text-left">País</th>
@@ -77,6 +103,7 @@ export default function AttackFeed({ attacks, onBlock }) {
                   className="border-b border-surface-700/50 hover:bg-surface-700/40 transition-colors"
                 >
                   <td className="px-4 py-2 font-mono text-cyan-300 text-xs">{a.src_ip}</td>
+                  <td className="px-4 py-2"><HoneypotBadge honeypot={a.honeypot} /></td>
                   <td className="px-4 py-2"><Badge type={a.attack_type} /></td>
                   <td className="px-4 py-2"><ConfBar value={a.confidence} /></td>
                   <td className="px-4 py-2 text-slate-400 text-xs">{a.country ?? '—'}</td>

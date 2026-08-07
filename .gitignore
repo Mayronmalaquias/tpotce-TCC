@@ -16,3 +16,6 @@ venv/
 **/.DS_Store
 .idea
 install_tpot.log
+
+# segredos (API keys, credenciais)
+.env

@@ -1,6 +1,9 @@
 """
-Monitora o arquivo de log do Cowrie (JSONL) em tempo real.
+Monitora o arquivo de log de um honeypot (JSONL) em tempo real.
 Agrupa eventos por session_id e dispara callback quando a sessão é encerrada.
+
+Genérico o suficiente para Cowrie e Dionaea: cada instância recebe o caminho
+do log e o conjunto de eventos que marcam o fim de uma sessão.
 """
 
 import json
@@ -20,18 +23,25 @@ class LogWatcher:
         self,
         on_session: Callable[[str, list], None],
         log_path: Optional[str] = None,
+        default_log: Optional[Path] = None,
+        session_end_events: Optional[set] = None,
+        label: str = "LogWatcher",
+        thread_name: str = "log-watcher",
     ):
-        self._path     = Path(log_path) if log_path else DEFAULT_LOG
-        self._callback = on_session
+        self._path        = Path(log_path) if log_path else (default_log or DEFAULT_LOG)
+        self._callback     = on_session
         self._sessions: dict[str, list] = defaultdict(list)
-        self._running  = False
+        self._running      = False
         self._thread: Optional[threading.Thread] = None
+        self._session_end  = session_end_events or _SESSION_END
+        self._label        = label
+        self._thread_name  = thread_name
 
     def start(self):
         self._running = True
-        self._thread  = threading.Thread(target=self._run, daemon=True, name="log-watcher")
+        self._thread  = threading.Thread(target=self._run, daemon=True, name=self._thread_name)
         self._thread.start()
-        print(f"[LogWatcher] Monitorando: {self._path}")
+        print(f"[{self._label}] Monitorando: {self._path}")
 
     def stop(self):
         self._running = False
@@ -74,10 +84,10 @@ class LogWatcher:
 
         self._sessions[sid].append(ev)
 
-        if ev.get("eventid") in _SESSION_END:
+        if ev.get("eventid") in self._session_end:
             events = self._sessions.pop(sid, [])
             if events:
                 try:
                     self._callback(sid, events)
                 except Exception as exc:
-                    print(f"[LogWatcher] Erro no callback da sessao {sid}: {exc}")
+                    print(f"[{self._label}] Erro no callback da sessao {sid}: {exc}")

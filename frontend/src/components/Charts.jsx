@@ -8,6 +8,9 @@ const COLORS = {
   command_injection: '#f97316',
   malware_download:  '#a855f7',
   recon:             '#3b82f6',
+  port_scan:         '#14b8a6',
+  service_probe:     '#eab308',
+  exploit_attempt:   '#ec4899',
 }
 
 const LABELS = {
@@ -15,17 +18,22 @@ const LABELS = {
   command_injection: 'Cmd Injection',
   malware_download:  'Malware DL',
   recon:             'Recon',
+  port_scan:         'Port Scan',
+  service_probe:     'Probe',
+  exploit_attempt:   'Exploit',
 }
 
 const ATTACK_TYPES = Object.keys(COLORS)
+const LAST_TYPE = ATTACK_TYPES[ATTACK_TYPES.length - 1]
 
 // Converte dados do backend [{hour, attack_type, count}] para
 // [{hour, brute_force: N, command_injection: N, ...}]
 function buildBarData(raw) {
   const map = {}
+  const emptyRow = () => Object.fromEntries(ATTACK_TYPES.map(t => [t, 0]))
   raw.forEach(({ hour, attack_type, count }) => {
     const label = hour ? hour.slice(11, 16) : '??'
-    if (!map[label]) map[label] = { hour: label, brute_force: 0, command_injection: 0, malware_download: 0, recon: 0 }
+    if (!map[label]) map[label] = { hour: label, ...emptyRow() }
     if (attack_type in map[label]) map[label][attack_type] += count
   })
   return Object.values(map).slice(-12) // últimas 12 horas
@@ -64,7 +72,7 @@ export default function Charts({ chartData, typeCounts = {} }) {
               formatter={v => <span style={{ color: '#94a3b8', fontSize: 11 }}>{LABELS[v] ?? v}</span>}
             />
             {ATTACK_TYPES.map(t => (
-              <Bar key={t} dataKey={t} stackId="a" fill={COLORS[t]} radius={t === 'recon' ? [3, 3, 0, 0] : [0, 0, 0, 0]} />
+              <Bar key={t} dataKey={t} stackId="a" fill={COLORS[t]} radius={t === LAST_TYPE ? [3, 3, 0, 0] : [0, 0, 0, 0]} />
             ))}
           </BarChart>
         </ResponsiveContainer>

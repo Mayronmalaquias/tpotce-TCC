@@ -4,6 +4,7 @@ import Overview   from './components/Overview'
 import AttackFeed from './components/AttackFeed'
 import Charts     from './components/Charts'
 import GeoMap     from './components/GeoMap'
+import Report     from './components/Report'
 import { useWebSocket } from './hooks/useWebSocket'
 
 const API = ''  // vazio = mesmo host (proxy do Vite em dev)
@@ -154,6 +155,9 @@ export default function App() {
 
         {/* Mapa geográfico */}
         <GeoMap geoData={geoData} />
+
+        {/* Relatório em linguagem natural (LLM) */}
+        <Report />
 
       </main>
     </div>

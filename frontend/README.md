@@ -31,7 +31,8 @@ src/
 │   ├── Overview.jsx          ← 4 cards de métricas
 │   ├── AttackFeed.jsx        ← tabela de ataques em tempo real
 │   ├── Charts.jsx            ← gráfico de barras + donut
-│   └── GeoMap.jsx            ← mapa geográfico (Leaflet)
+│   ├── GeoMap.jsx            ← mapa geográfico (Leaflet)
+│   └── Report.jsx            ← relatório em linguagem natural (LLM)
 │
 └── hooks/
     └── useWebSocket.js       ← conexão WebSocket com reconexão automática
@@ -81,6 +82,10 @@ Dois gráficos com Recharts em tema escuro:
 ### `GeoMap.jsx` — Mapa geográfico
 
 Mapa interativo com tile escuro (CartoDB Dark Matter) via OpenStreetMap. Cada IP atacante é um círculo colorido pelo tipo de ataque predominante. O raio do círculo cresce com o número de ataques do mesmo IP. Clique no marcador para ver detalhes (IP, cidade, país, tipo, quantidade).
+
+### `Report.jsx` — Relatório em linguagem natural (LLM)
+
+Botão "Gerar Relatório" com seletor de período (24h / 3 dias / 1 semana) que chama `GET /api/report?hours=N` no backend. Renderiza o texto retornado (sumário executivo, análise técnica, recomendações) com um parser leve de markdown (negrito `**texto**` e listas `- item`). Exibe estado de carregamento e erro (ex.: `ANTHROPIC_API_KEY` não configurada no backend → mensagem de erro amigável).
 
 ---
 

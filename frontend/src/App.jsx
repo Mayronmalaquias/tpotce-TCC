@@ -6,11 +6,12 @@ import Charts     from './components/Charts'
 import GeoMap     from './components/GeoMap'
 import Report     from './components/Report'
 import { useWebSocket } from './hooks/useWebSocket'
+import { authFetch } from './lib/api'
 
 const API = ''  // vazio = mesmo host (proxy do Vite em dev)
 
 async function apiFetch(path) {
-  const res = await fetch(API + path)
+  const res = await authFetch(API + path)
   if (!res.ok) throw new Error(res.statusText)
   return res.json()
 }

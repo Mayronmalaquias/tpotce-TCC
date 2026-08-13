@@ -1,5 +1,6 @@
 import { useState } from 'react'
 import { FileText, RefreshCw, AlertCircle } from 'lucide-react'
+import { authFetch } from '../lib/api'
 
 function renderInline(text) {
   const parts = text.split(/(\*\*[^*]+\*\*)/g)
@@ -40,7 +41,7 @@ export default function Report() {
     setLoading(true)
     setError(null)
     try {
-      const res  = await fetch(`/api/report?hours=${hours}`)
+      const res  = await authFetch(`/api/report?hours=${hours}`)
       const body = await res.json()
       if (!res.ok) throw new Error(body.detail || 'Falha ao gerar relatório')
       setReport(body.report)

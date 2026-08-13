@@ -133,6 +133,17 @@ O cliente recebe `stats` imediatamente ao conectar, e `new_attack` a cada nova s
 | `DIONAEA_LOG_PATH` | `data/dionaea/log/dionaea.json` | Caminho do log do Dionaea |
 | `ANTHROPIC_API_KEY` | — | Chave da API Anthropic para o módulo LLM |
 | `LLM_MODEL` | `claude-haiku-4-5` | Modelo usado para gerar os relatórios |
+| `BEEIA_API_KEY` | — (sem auth) | Chave exigida em `X-API-Key` (REST) / `?api_key=` (WS) |
+| `CORS_ORIGINS` | `http://localhost:5173` | Origens autorizadas via CORS, separadas por vírgula |
+
+## Segurança da API (`auth.py`, `ratelimit.py`)
+
+Implementado em 2026-07-29, depois de identificar que a API não tinha nenhuma proteção — qualquer pessoa alcançando o backend podia bloquear/desbloquear IPs arbitrários ou esgotar a cota da API da Anthropic via `/api/report`.
+
+- **`auth.py`** — dependency `require_api_key` (rotas REST, via `api_router = APIRouter(dependencies=[...])` em `main.py`) e `ws_key_is_valid()` (checagem manual dentro de `ws_endpoint`, já que dependencies de rota HTTP não se aplicam automaticamente a rotas WebSocket). Sem `BEEIA_API_KEY` configurada, tudo funciona sem autenticação — modo dev local.
+- **`ratelimit.py`** — `RateLimiter` em memória, por IP. Um limite global (60 req/min, aplicado a todo `api_router`) e um mais estrito só em `/api/report` (5 a cada 10 min).
+- Com `BEEIA_API_KEY` definida, `/docs`, `/redoc` e `/openapi.json` ficam desabilitados (reduz superfície de reconhecimento).
+- **Isso não é suficiente para expor o backend na internet sozinho** — a chave fica embutida no bundle do frontend (visível a quem abrir a página). A camada que realmente restringe *quem chega* à página é o proxy reverso com Basic Auth — ver [`md-usotcc/proteger-dashboard.md`](../../md-usotcc/proteger-dashboard.md) e `docker/nginx/dist/conf/beeia.conf`.
 
 ## Próximo processo
 

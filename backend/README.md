@@ -86,6 +86,14 @@ Consulta `ip-api.com` (gratuito, sem chave de API, limite de 45 req/min). Manté
 
 Usa a API da Anthropic (`ANTHROPIC_API_KEY` no `.env`, modelo configurável via `LLM_MODEL`, padrão `claude-haiku-4-5`) para gerar um relatório com sumário executivo, análise técnica e recomendações de mitigação a partir dos dados agregados em `database.get_report_data()`. Não faz nenhuma requisição se `ANTHROPIC_API_KEY` estiver vazia — a rota `/api/report` retorna 503 nesse caso.
 
+### `auth.py` — Autenticação por API key
+
+Protege as rotas REST e o WebSocket com uma chave compartilhada (`BEEIA_API_KEY` no `.env`, header `X-API-Key` ou `?api_key=` no WS). Sem a variável configurada, a API roda sem autenticação (modo dev local — loga um aviso no startup). **Não é suficiente sozinha para expor o backend publicamente** — ver [`md-usotcc/proteger-dashboard.md`](../md-usotcc/proteger-dashboard.md).
+
+### `ratelimit.py` — Rate limiting
+
+`RateLimiter` em memória, por IP. Aplicado globalmente (60 req/min) via `api_router` em `main.py`, com limite adicional mais estrito em `/api/report` (5 a cada 10 min — evita gasto descontrolado de créditos da API da Anthropic).
+
 ---
 
 ## Rotas da API
@@ -126,6 +134,10 @@ O cliente recebe `stats` imediatamente ao conectar, e `new_attack` a cada nova s
 | `DIONAEA_LOG_PATH` | `data/dionaea/log/dionaea.json` | Caminho do log do Dionaea |
 | `ANTHROPIC_API_KEY` | — | Chave da API Anthropic para o módulo LLM (`/api/report`) |
 | `LLM_MODEL` | `claude-haiku-4-5` | Modelo usado para gerar os relatórios |
+| `BEEIA_API_KEY` | — (sem auth) | Chave exigida em todas as rotas REST + WS. **Defina antes de expor fora de localhost.** |
+| `CORS_ORIGINS` | `http://localhost:5173` | Origens autorizadas via CORS, separadas por vírgula |
+
+> **Antes de deixar este backend acessível fora da sua máquina**, leia [`md-usotcc/proteger-dashboard.md`](../md-usotcc/proteger-dashboard.md) — sem `BEEIA_API_KEY` e sem colocar atrás de um proxy autenticado, qualquer pessoa pode bloquear/desbloquear IPs no seu firewall e gastar sua cota da API da Anthropic.
 
 ---
 

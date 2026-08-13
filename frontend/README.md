@@ -10,12 +10,15 @@ Interface web do BeeIA. Exibe ataques em tempo real via WebSocket, gráficos de 
 
 ```bash
 npm install
+cp .env.example .env   # defina VITE_API_KEY com o mesmo valor de BEEIA_API_KEY do backend
 npm run dev      # http://localhost:5173 (desenvolvimento)
 npm run build    # gera dist/ para produção
 npm run preview  # testa o build de produção localmente
 ```
 
 > O backend precisa estar rodando em `http://localhost:8000` antes de abrir o frontend.
+
+> `VITE_API_KEY` é embutida no bundle JS em tempo de build — qualquer um que acesse a página consegue extraí-la. Isso é aceitável como defesa em profundidade contra bots, mas **não substitui** proteger o acesso à própria página (ver [`md-usotcc/proteger-dashboard.md`](../md-usotcc/proteger-dashboard.md) antes de publicar).
 
 ---
 
@@ -34,8 +37,11 @@ src/
 │   ├── GeoMap.jsx            ← mapa geográfico (Leaflet)
 │   └── Report.jsx            ← relatório em linguagem natural (LLM)
 │
-└── hooks/
-    └── useWebSocket.js       ← conexão WebSocket com reconexão automática
+├── hooks/
+│   └── useWebSocket.js       ← conexão WebSocket com reconexão automática
+│
+└── lib/
+    └── api.js                ← authFetch()/wsUrl() — injeta a API key (VITE_API_KEY) nas chamadas
 ```
 
 ---

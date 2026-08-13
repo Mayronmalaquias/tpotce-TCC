@@ -228,6 +228,19 @@ cd ../dionaea && python train.py --dataset ../../data/dataset/dionaea_real_featu
 
 ---
 
+## Segurança — antes de publicar
+
+Os honeypots são feitos para ficar públicos; **o dashboard/API não são**. Antes de expor o sistema fora da sua máquina:
+
+1. Defina `BEEIA_API_KEY` no `.env` e `VITE_API_KEY` (mesmo valor) no `frontend/.env`, rebuilde o frontend.
+2. Ajuste `CORS_ORIGINS` no `.env` para o domínio real do dashboard.
+3. Não exponha a porta 8000 do backend diretamente — use o proxy reverso autenticado (`docker/nginx/dist/conf/beeia.conf`, porta 64298, Basic Auth via `WEB_USER`).
+4. Bloqueie a porta 8000 para acesso externo no firewall do host.
+
+Rate limiting já vem ativo por padrão (60 req/min geral, 5 a cada 10 min em `/api/report`). Guia completo: [`md-usotcc/proteger-dashboard.md`](md-usotcc/proteger-dashboard.md).
+
+---
+
 ## Documentação específica por módulo
 
 | Módulo | README |
@@ -238,6 +251,7 @@ cd ../dionaea && python train.py --dataset ../../data/dataset/dionaea_real_featu
 | Backend (API) | [backend/README.md](backend/README.md) |
 | Frontend (Dashboard) | [frontend/README.md](frontend/README.md) |
 | Documentação por processo | [Docs/Process/](Docs/Process/README.md) |
+| Guia: proteger o dashboard antes de publicar | [md-usotcc/proteger-dashboard.md](md-usotcc/proteger-dashboard.md) |
 
 ---
 

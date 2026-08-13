@@ -15,6 +15,17 @@ Endpoints REST:
 WebSocket:
   WS /ws  → emite { type: "new_attack"|"stats", data: {...} }
 
+Segurança (ver backend/auth.py, backend/ratelimit.py e
+md-usotcc/proteger-dashboard.md antes de expor publicamente):
+  - Todas as rotas acima e o /ws exigem o header `X-API-Key` (ou ?api_key=
+    no WS) quando BEEIA_API_KEY está definida no .env. Sem a variável, a API
+    fica sem autenticação (modo dev local).
+  - CORS restrito às origens em CORS_ORIGINS (.env), não mais "*".
+  - Rate limit por IP: global + limite mais estrito em /api/report (custa
+    chamada de API paga).
+  - Este backend não deve ser exposto diretamente à internet — coloque atrás
+    de um proxy reverso autenticado (ver docker/nginx/dist/conf/beeia.conf).
+
 Iniciar:
   uvicorn main:app --reload --host 0.0.0.0 --port 8000
 """
@@ -25,16 +36,18 @@ from contextlib import asynccontextmanager
 from pathlib import Path
 from typing import Optional
 
-from fastapi import FastAPI, HTTPException, Query, WebSocket, WebSocketDisconnect
+from fastapi import APIRouter, Depends, FastAPI, HTTPException, Query, WebSocket, WebSocketDisconnect
 from fastapi.middleware.cors import CORSMiddleware
 
 import database
 import firewall
 import geo
 import llm
+from auth import auth_enabled, require_api_key, ws_key_is_valid
 from classifier import classifier as cowrie_classifier
 from dionaea_classifier import classifier as dionaea_classifier
 from log_watcher import LogWatcher
+from ratelimit import RateLimiter
 
 # ── WebSocket manager ─────────────────────────────────────────────────────────
 
@@ -217,23 +230,47 @@ async def lifespan(app: FastAPI):
 
 # ── app ───────────────────────────────────────────────────────────────────────
 
-app = FastAPI(title="BeeIA API", version="1.0.0", lifespan=lifespan)
+# Com BEEIA_API_KEY configurada, desliga a documentação automática (/docs,
+# /redoc, /openapi.json) para não expor o formato da API sem necessidade.
+_docs_kwargs = {"docs_url": None, "redoc_url": None, "openapi_url": None} if auth_enabled() else {}
+
+app = FastAPI(
+    title="BeeIA API",
+    version="1.0.0",
+    lifespan=lifespan,
+    **_docs_kwargs,
+)
+
+CORS_ORIGINS = [o.strip() for o in os.getenv("CORS_ORIGINS", "http://localhost:5173").split(",") if o.strip()]
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
+    allow_origins=CORS_ORIGINS,
     allow_methods=["*"],
     allow_headers=["*"],
 )
 
+if not auth_enabled():
+    print("[BeeIA] AVISO: BEEIA_API_KEY nao configurada — API rodando sem autenticacao (modo dev local).")
+
+# `require_api_key`/`_global_rate_limit` só fazem sentido para requisições
+# HTTP normais — um APIRouter dedicado evita que sejam avaliadas também para
+# a rota WebSocket (que usa checagem própria, ver ws_key_is_valid).
+_global_rate_limit = RateLimiter(max_calls=60, period_s=60)   # 60 req/min por IP em qualquer rota
+# Limite adicional (mais estrito) só para /api/report, que dispara uma
+# chamada paga à API da Anthropic — soma-se ao _global_rate_limit acima.
+_report_rate_limit = RateLimiter(max_calls=5, period_s=600)   # 5 a cada 10 min por IP
+
+api_router = APIRouter(dependencies=[Depends(require_api_key), Depends(_global_rate_limit)])
+
 # ── rotas ─────────────────────────────────────────────────────────────────────
 
-@app.get("/api/stats")
+@api_router.get("/api/stats")
 def stats():
     return database.get_stats()
 
 
-@app.get("/api/attacks")
+@api_router.get("/api/attacks")
 def attacks(
     limit:       int            = Query(50,   ge=1, le=200),
     offset:      int            = Query(0,    ge=0),
@@ -243,27 +280,27 @@ def attacks(
     return database.get_attacks(limit=limit, offset=offset, attack_type=attack_type, honeypot=honeypot)
 
 
-@app.get("/api/attacks/chart")
+@api_router.get("/api/attacks/chart")
 def chart(hours: int = Query(24, ge=1, le=168)):
     return database.get_chart_data(hours=hours)
 
 
-@app.get("/api/attacks/top-ips")
+@api_router.get("/api/attacks/top-ips")
 def top_ips(limit: int = Query(10, ge=1, le=50)):
     return database.get_top_ips(limit=limit)
 
 
-@app.get("/api/geo")
+@api_router.get("/api/geo")
 def geo_data():
     return database.get_geo_data()
 
 
-@app.get("/api/blocked")
+@api_router.get("/api/blocked")
 def blocked():
     return database.get_blocked_ips()
 
 
-@app.get("/api/report")
+@api_router.get("/api/report", dependencies=[Depends(_report_rate_limit)])
 def report(hours: int = Query(24, ge=1, le=168)):
     data = database.get_report_data(hours=hours)
     try:
@@ -275,7 +312,7 @@ def report(hours: int = Query(24, ge=1, le=168)):
     return {"report": text, "data": data}
 
 
-@app.post("/api/block/{ip}")
+@api_router.post("/api/block/{ip}")
 def block(ip: str):
     ok, msg = firewall.block_ip(ip)
     if ok:
@@ -283,7 +320,7 @@ def block(ip: str):
     return {"success": ok, "message": msg}
 
 
-@app.delete("/api/block/{ip}")
+@api_router.delete("/api/block/{ip}")
 def unblock(ip: str):
     ok, msg = firewall.unblock_ip(ip)
     if ok:
@@ -291,10 +328,16 @@ def unblock(ip: str):
     return {"success": ok, "message": msg}
 
 
-# ── WebSocket ─────────────────────────────────────────────────────────────────
+app.include_router(api_router)
+
+# ── WebSocket (fora do api_router — usa checagem própria, ver ws_key_is_valid) ─
 
 @app.websocket("/ws")
 async def ws_endpoint(ws: WebSocket):
+    if not ws_key_is_valid(ws):
+        await ws.close(code=1008)  # policy violation
+        return
+
     await ws_manager.connect(ws)
     # Envia snapshot de stats ao conectar
     await ws.send_json({"type": "stats", "data": database.get_stats()})

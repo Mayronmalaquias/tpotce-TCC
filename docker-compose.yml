@@ -103,11 +103,16 @@ services:
 ##################
 
 # Nginx (Para acessar a interface se você for usar o ElasticSearch depois)
+# Também serve como proxy reverso autenticado do dashboard/API do BeeIA na
+# porta 64298 — ver docker/nginx/dist/conf/beeia.conf e
+# md-usotcc/proteger-dashboard.md antes de expor o backend publicamente.
   nginx:
     container_name: nginx
     restart: always
     environment:
       - TPOT_OSTYPE=${TPOT_OSTYPE}
+    extra_hosts:
+      - "host.docker.internal:host-gateway"  # permite alcançar o backend do BeeIA rodando no host
     depends_on:
       tpotinit:
         condition: service_healthy
@@ -124,6 +129,7 @@ services:
     ports:
       - "64297:64297"
       - "64294:64294"
+      - "64298:64298"   # BeeIA — dashboard + API atrás de Basic Auth
     image: ${TPOT_REPO}/nginx:${TPOT_VERSION}
     pull_policy: ${TPOT_PULL_POLICY}
     read_only: true
@@ -132,3 +138,5 @@ services:
       - ${TPOT_DATA_PATH}/nginx/conf/nginxpasswd:/etc/nginx/nginxpasswd:ro
       - ${TPOT_DATA_PATH}/nginx/conf/lswebpasswd:/etc/nginx/lswebpasswd:ro
       - ${TPOT_DATA_PATH}/nginx/log/:/var/log/nginx/
+      - ./docker/nginx/dist/conf/beeia.conf:/etc/nginx/conf.d/beeia.conf:ro
+      - ./frontend/dist:/var/lib/nginx/html/beeia:ro

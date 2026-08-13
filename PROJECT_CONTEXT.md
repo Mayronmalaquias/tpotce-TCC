@@ -131,6 +131,10 @@ Ambos os `train.py` implementam e comparam **três algoritmos** (`--model rf|svm
 | `firewall.py` | Detecta SO e executa `iptables` (Linux) ou `netsh advfirewall` (Windows); bloqueio automático quando confiança ≥ `AUTO_BLOCK_THRESHOLD` (padrão 0.95, configurável via `.env`). |
 | `geo.py` | Geolocalização via `ip-api.com`; cache em memória; rate limit de 1.4s entre chamadas; ignora IPs privados. |
 | `llm.py` | Usa a API da Anthropic (`ANTHROPIC_API_KEY`, `LLM_MODEL` padrão `claude-haiku-4-5`) para gerar relatório a partir de `database.get_report_data()`. Sem a chave configurada, `/api/report` retorna 503. |
+| `auth.py` | API key compartilhada (`BEEIA_API_KEY`) exigida em toda rota REST (`api_router`) e no WS (`ws_key_is_valid`). Sem a variável, roda sem autenticação (modo dev). |
+| `ratelimit.py` | `RateLimiter` em memória por IP — 60 req/min global, 5/10min em `/api/report`. |
+
+> **Segurança (adicionado em 2026-07-29):** por padrão, antes disso, o backend não tinha autenticação, CORS aberto (`*`) nem rate limit — qualquer um alcançando a API podia bloquear/desbloquear IPs arbitrários ou esgotar a cota da Anthropic via `/api/report`. Agora exige `BEEIA_API_KEY` (defesa em profundidade — a chave fica embutida no bundle do frontend, então não substitui controle de acesso à página) e restringe CORS via `CORS_ORIGINS`. A camada que efetivamente restringe quem chega ao dashboard é um proxy reverso com Basic Auth (`docker/nginx/dist/conf/beeia.conf`, porta 64298, reaproveita as credenciais `WEB_USER` do T-Pot) — ver [`md-usotcc/proteger-dashboard.md`](md-usotcc/proteger-dashboard.md). **Os honeypots (Cowrie/Dionaea) continuam feitos para ficar públicos — só o dashboard/API precisavam dessa proteção.**
 
 **Rotas REST:**
 

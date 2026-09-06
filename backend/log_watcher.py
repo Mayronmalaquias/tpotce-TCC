@@ -7,6 +7,7 @@ do log e o conjunto de eventos que marcam o fim de uma sessão.
 """
 
 import json
+import os
 import threading
 import time
 from collections import defaultdict
@@ -58,6 +59,26 @@ class LogWatcher:
 
     # ── thread principal ─────────────────────────────────────────────────────
 
+    def _rotated(self, f) -> bool:
+        """Diz se o arquivo aberto em `f` deixou de ser o arquivo do caminho.
+
+        O tpotinit rotaciona os logs dos honeypots a cada restart do stack
+        (cowrie.json vira cowrie.json.1.gz e um arquivo novo nasce no lugar).
+        Sem esta checagem o watcher seguiria lendo o descritor antigo e pararia
+        de ver eventos em silencio — sem erro, sem log — ate alguem reiniciar o
+        backend por outro motivo.
+        """
+        try:
+            on_disk = self._path.stat()
+        except OSError:
+            return True                       # sumiu: rotacao em andamento
+
+        here = os.fstat(f.fileno())
+        if (on_disk.st_ino, on_disk.st_dev) != (here.st_ino, here.st_dev):
+            return True                       # outro arquivo ocupa o caminho
+
+        return on_disk.st_size < f.tell()     # truncado atras da nossa posicao
+
     def _run(self):
         # Começa no final do arquivo (ignora histórico ao iniciar)
         pos = self._path.stat().st_size if self._path.exists() else 0
@@ -72,11 +93,20 @@ class LogWatcher:
                     f.seek(pos)
                     while self._running:
                         line = f.readline()
-                        if not line:
-                            time.sleep(0.3)
+                        if line:
+                            pos = f.tell()
+                            self._process(line.strip())
                             continue
-                        pos = f.tell()
-                        self._process(line.strip())
+
+                        # Sem linha nova: e a hora de checar rotacao, antes de
+                        # dormir. O arquivo novo comeca do zero, entao a
+                        # posicao tambem volta para o inicio.
+                        if self._rotated(f):
+                            print(f"[{self._label}] Log rotacionado — reabrindo {self._path}")
+                            pos = 0
+                            break
+
+                        time.sleep(0.3)
             except OSError:
                 time.sleep(2)
 

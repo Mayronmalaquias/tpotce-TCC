@@ -22,13 +22,16 @@ LABELS_PATH   = "../data/dataset/session_labels.csv"
 FEATURES_PATH = "../data/dataset/training_features.csv"
 
 
-def main(sessions_per_class: int = 500, seed: int = 42) -> None:
-    print(f"[1/2] Gerando logs sintéticos ({sessions_per_class} sessões por classe)...\n")
+def main(sessions_per_class: int = 500, seed: int = 42, noise: float = 0.0,
+         features_path: str = FEATURES_PATH) -> None:
+    print(f"[1/2] Gerando logs sintéticos ({sessions_per_class} sessões por classe, ruído={noise})...")
+    print()
     generate_dataset(
         logs_path=LOGS_PATH,
         labels_path=LABELS_PATH,
         sessions_per_class=sessions_per_class,
         seed=seed,
+        noise=noise,
     )
 
     print(f"\n[2/2] Extraindo features por sessão...")
@@ -40,7 +43,7 @@ def main(sessions_per_class: int = 500, seed: int = 42) -> None:
 
     print("\n" + "-" * 50)
     print("Dataset pronto!")
-    print(f"  Arquivo: {FEATURES_PATH}")
+    print(f"  Arquivo: {features_path}")
     print()
     print("  Features numéricas (13):")
     print("    login_attempt_count    — volume de tentativas de login")

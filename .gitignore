@@ -29,3 +29,10 @@ data/captura_real/*
 
 # Log transitorio das rodadas do harness experimental
 ml/experiments/run.log
+
+# Checkpoints dos modelos de sequencia (~2,5 MB cada) e logs de treino.
+# Seguem a mesma politica de ml/**/models/. O que sustenta os resultados no
+# artigo e o comparacao.json, esse sim versionado.
+ml/sequence/resultados/*.pt
+ml/sequence/*.log
+ml/sequence/*.err

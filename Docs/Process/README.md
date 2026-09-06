@@ -18,4 +18,8 @@ Cada arquivo nesta pasta documenta **um processo específico** do projeto BeeIA 
 | 12 | [honeypot-dionaea.md](12-honeypot-dionaea.md) | Segundo honeypot: infraestrutura, pipeline, ML e integração no backend/frontend |
 | 13 | [deploy-publicacao-aws.md](13-deploy-publicacao-aws.md) | Publicação em produção: instância AWS EC2, acesso via SSM, backend como serviço, domínio próprio |
 
+> Para o texto do TCC2 com os resultados medidos e as correções que o artigo do
+> TCC1 precisa, veja [artigo-tcc2-consolidado.md](../artigo-tcc2-consolidado.md).
+> O conteúdo do banner está em [banner-tcc.md](../banner-tcc.md).
+
 > Para uma visão consolidada de tudo em um único documento, veja [PROJECT_CONTEXT.md](../../PROJECT_CONTEXT.md) na raiz do repositório. Os arquivos aqui detalham cada processo individualmente; o `PROJECT_CONTEXT.md` é o resumo executivo.

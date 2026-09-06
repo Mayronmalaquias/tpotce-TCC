@@ -287,6 +287,8 @@ Ao gerar ou alterar código neste repositório, siga:
 | Modelo ML (Dionaea) | [ml/dionaea/README.md](ml/dionaea/README.md) |
 | Backend (API) | [backend/README.md](backend/README.md) |
 | Frontend (Dashboard) | [frontend/README.md](frontend/README.md) |
+| **Documento consolidado para o TCC2** | [Docs/artigo-tcc2-consolidado.md](Docs/artigo-tcc2-consolidado.md) |
+| **Conteúdo do banner** | [Docs/banner-tcc.md](Docs/banner-tcc.md) |
 | Documentação por processo | [Docs/Process/README.md](Docs/Process/README.md) |
 | Guia: rodar Cowrie | [md-usotcc/rodar-cowrie.md](md-usotcc/rodar-cowrie.md) |
 | Guia: testar via PuTTY | [md-usotcc/rodar-putty.md](md-usotcc/rodar-putty.md) |

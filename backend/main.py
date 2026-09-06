@@ -150,14 +150,16 @@ def _on_session(session_id: str, events: list):
 
 
 def _on_dionaea_session(session_id: str, events: list):
-    """Callback do LogWatcher do Dionaea — janela de conexões de um IP encerrada."""
-    connect_evs = [e for e in events
-                   if e.get("eventid") in ("dionaea.connection.tcp.accept", "dionaea.connection.udp.accept")]
-    first     = connect_evs[0] if connect_evs else events[0]
-    src_ip    = first.get("src_ip", "unknown")
+    """Callback do LogWatcher do Dionaea — janela de conexoes de um IP encerrada.
+
+    `session_id` aqui e o IP de origem: o log real do Dionaea nao tem campo
+    `session`, entao o agrupamento e sintetizado pelo watcher e fechado por
+    inatividade. Como o mesmo IP volta a atacar depois, o identificador
+    persistido combina IP e horario para nao colidir entre janelas.
+    """
+    first     = events[0]
+    src_ip    = first.get("src_ip", session_id)
     timestamp = first.get("timestamp", "")
-    protocols = [e.get("protocol") for e in connect_evs if e.get("protocol")]
-    protocol  = max(set(protocols), key=protocols.count) if protocols else None
 
     result = dionaea_classifier.predict(events)
     if not result:
@@ -167,17 +169,17 @@ def _on_dionaea_session(session_id: str, events: list):
     location = geo.get_location(src_ip) or {}
 
     attack = {
-        "session_id":          session_id,
+        "session_id":          f"{src_ip}-{timestamp}" if timestamp else session_id,
         "honeypot":            "dionaea",
         "src_ip":              src_ip,
         "attack_type":         result["attack_type"],
         "confidence":          result["confidence"],
         "timestamp":           timestamp,
-        "protocol":            protocol,
+        "protocol":            feat.get("protocol"),
         "connection_count":    feat["connection_count"],
         "unique_ports":        feat["unique_ports"],
-        "has_shellcode":       feat["has_shellcode"],
-        "has_file_download":   feat["has_download"],
+        "has_shellcode":       0,   # emu_profiles vazia em captura real
+        "has_file_download":   0,   # registrado so no dionaea.sqlite
         "session_duration_s":  feat["session_duration_s"],
         "login_attempts":      feat["login_attempt_count"],
         "country":             location.get("country"),
@@ -196,13 +198,20 @@ cowrie_watcher = LogWatcher(
     on_session=_on_session,
     log_path=os.getenv("COWRIE_LOG_PATH"),
 )
+# O log real do Dionaea nao tem campo `session` nem evento de encerramento:
+# sao conexoes soltas. A sessao e sintetizada por IP de origem e fechada apos
+# DIONAEA_SESSION_TIMEOUT_S sem novos eventos daquele IP — mesmo criterio usado
+# na analise offline (data_pipeline/extract_dionaea_real.py).
+DIONAEA_SESSION_TIMEOUT_S = float(os.getenv("DIONAEA_SESSION_TIMEOUT_S", "300"))
+
 dionaea_watcher = LogWatcher(
     on_session=_on_dionaea_session,
     log_path=os.getenv("DIONAEA_LOG_PATH"),
     default_log=Path(__file__).parent.parent / "data" / "dionaea" / "log" / "dionaea.json",
-    session_end_events={"dionaea.connection.free"},
     label="DionaeaWatcher",
     thread_name="dionaea-watcher",
+    session_key=lambda ev: ev.get("src_ip"),
+    session_timeout_s=DIONAEA_SESSION_TIMEOUT_S,
 )
 
 

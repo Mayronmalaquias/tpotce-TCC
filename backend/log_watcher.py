@@ -28,6 +28,8 @@ class LogWatcher:
         session_end_events: Optional[set] = None,
         label: str = "LogWatcher",
         thread_name: str = "log-watcher",
+        session_key: Optional[Callable[[dict], Optional[str]]] = None,
+        session_timeout_s: Optional[float] = None,
     ):
         base = Path(log_path) if log_path else (default_log or DEFAULT_LOG)
         # Caminho relativo e resolvido a partir da raiz do repositorio, nao do
@@ -41,6 +43,17 @@ class LogWatcher:
         self._session_end  = session_end_events or _SESSION_END
         self._label        = label
         self._thread_name  = thread_name
+
+        # Como identificar a que sessao um evento pertence. O Cowrie traz um
+        # campo `session` pronto; o Dionaea real nao tem nenhum, e o
+        # agrupamento precisa ser sintetizado (na pratica, por IP de origem).
+        self._session_key = session_key or (lambda ev: ev.get("session"))
+
+        # Sessoes sintetizadas nao tem evento de encerramento: fecham por
+        # inatividade. Quando definido, uma sessao e entregue ao classificador
+        # apos este intervalo sem eventos novos.
+        self._session_timeout_s = session_timeout_s
+        self._last_seen: dict[str, float] = {}
 
     def start(self):
         self._running = True
@@ -98,9 +111,12 @@ class LogWatcher:
                             self._process(line.strip())
                             continue
 
-                        # Sem linha nova: e a hora de checar rotacao, antes de
-                        # dormir. O arquivo novo comeca do zero, entao a
-                        # posicao tambem volta para o inicio.
+                        # Sem linha nova: momento de fechar sessoes vencidas e
+                        # de checar rotacao, antes de dormir.
+                        self._flush_stale()
+
+                        # O arquivo novo comeca do zero, entao a posicao
+                        # tambem volta para o inicio.
                         if self._rotated(f):
                             print(f"[{self._label}] Log rotacionado — reabrindo {self._path}")
                             pos = 0
@@ -118,16 +134,38 @@ class LogWatcher:
         except json.JSONDecodeError:
             return
 
-        sid = ev.get("session")
+        sid = self._session_key(ev)
         if not sid:
             return
 
         self._sessions[sid].append(ev)
+        self._last_seen[sid] = time.monotonic()
 
         if ev.get("eventid") in self._session_end:
-            events = self._sessions.pop(sid, [])
-            if events:
-                try:
-                    self._callback(sid, events)
-                except Exception as exc:
-                    print(f"[{self._label}] Erro no callback da sessao {sid}: {exc}")
+            self._flush(sid)
+
+    def _flush(self, sid: str):
+        """Entrega a sessao ao classificador e esquece o estado dela."""
+        events = self._sessions.pop(sid, [])
+        self._last_seen.pop(sid, None)
+        if not events:
+            return
+        try:
+            self._callback(sid, events)
+        except Exception as exc:
+            print(f"[{self._label}] Erro no callback da sessao {sid}: {exc}")
+
+    def _flush_stale(self):
+        """Fecha sessoes paradas ha mais tempo que `session_timeout_s`.
+
+        Necessario para honeypots cujo log nao marca fim de sessao — sem isso
+        os eventos ficariam acumulados em memoria para sempre, sem nunca serem
+        classificados.
+        """
+        if not self._session_timeout_s:
+            return
+        agora = time.monotonic()
+        vencidas = [sid for sid, visto in self._last_seen.items()
+                    if agora - visto >= self._session_timeout_s]
+        for sid in vencidas:
+            self._flush(sid)

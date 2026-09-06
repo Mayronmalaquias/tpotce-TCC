@@ -17,6 +17,11 @@ export function authFetch(path, options = {}) {
 }
 
 export function wsUrl(path = '/ws') {
-  const base = `ws://${window.location.host}${path}`
+  // Numa pagina servida por HTTPS o navegador bloqueia `ws://` como mixed
+  // content e o construtor do WebSocket lanca excecao — em producao o
+  // dashboard fica atras do nginx com TLS, entao o protocolo tem que
+  // acompanhar o da pagina.
+  const proto = window.location.protocol === 'https:' ? 'wss:' : 'ws:'
+  const base = `${proto}//${window.location.host}${path}`
   return API_KEY ? `${base}?api_key=${encodeURIComponent(API_KEY)}` : base
 }

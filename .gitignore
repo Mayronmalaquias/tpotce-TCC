@@ -1,5 +1,5 @@
 # dados gerados
-data/
+data/*
 _data/
 
 # modelos treinados (arquivos grandes)
@@ -19,3 +19,13 @@ install_tpot.log
 
 # segredos (API keys, credenciais)
 .env
+
+# Evidencia da captura real do Dionaea: os CSVs derivados sao pequenos e
+# sustentam os resultados do TCC, entao sao versionados. A captura bruta
+# (.json/.sqlite/.gz, ~69 MB) continua de fora.
+!data/captura_real/
+data/captura_real/*
+!data/captura_real/*.csv
+
+# Log transitorio das rodadas do harness experimental
+ml/experiments/run.log

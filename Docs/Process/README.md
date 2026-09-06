@@ -16,5 +16,6 @@ Cada arquivo nesta pasta documenta **um processo específico** do projeto BeeIA 
 | 10 | [limitacoes-e-trabalhos-futuros.md](10-limitacoes-e-trabalhos-futuros.md) | O que falta implementar, lacunas artigo × código |
 | 11 | [cronograma-e-status.md](11-cronograma-e-status.md) | Datas de entrega do TCC e status |
 | 12 | [honeypot-dionaea.md](12-honeypot-dionaea.md) | Segundo honeypot: infraestrutura, pipeline, ML e integração no backend/frontend |
+| 13 | [deploy-publicacao-aws.md](13-deploy-publicacao-aws.md) | Publicação em produção: instância AWS EC2, acesso via SSM, backend como serviço, domínio próprio |
 
 > Para uma visão consolidada de tudo em um único documento, veja [PROJECT_CONTEXT.md](../../PROJECT_CONTEXT.md) na raiz do repositório. Os arquivos aqui detalham cada processo individualmente; o `PROJECT_CONTEXT.md` é o resumo executivo.

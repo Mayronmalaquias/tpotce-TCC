@@ -11,7 +11,17 @@ export function useWebSocket(onMessage) {
   const connect = () => {
     if (ws.current?.readyState === WebSocket.OPEN) return
 
-    const socket = new WebSocket(WS_URL)
+    // O construtor lanca (ex.: mixed content) — sem isso o erro sobe pelo
+    // useEffect e o React desmonta o dashboard inteiro, deixando tela branca.
+    let socket
+    try {
+      socket = new WebSocket(WS_URL)
+    } catch (err) {
+      console.error('[BeeIA] Falha ao abrir WebSocket:', err)
+      setConnected(false)
+      retryRef.current = setTimeout(connect, 5000)
+      return
+    }
     ws.current = socket
 
     socket.onopen = () => {

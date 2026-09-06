@@ -169,6 +169,10 @@ Fluxo: carga inicial via REST (`/api/stats`, `/api/attacks`, `/api/attacks/chart
 
 > Honeypot Dionaea e módulo LLM — descritos no artigo como pendentes numa versão anterior deste documento — **já estão implementados** (Dionaea em 2026-07-29, LLM em 2026-07-28).
 
+### 3.6 Publicação em produção (AWS EC2)
+
+Deploy real validado em 2026-08-22: instância `t3.micro` (free tier), containers Docker (Cowrie, Dionaea, nginx) administrados via AWS SSM (sem SSH — a porta 22 é ocupada pelo Cowrie), backend BeeIA rodando fora do Docker como serviço `systemd`, dashboard atrás de proxy nginx com Basic Auth. Detalhes completos, decisões de arquitetura e troubleshooting real em [`Docs/Process/13-deploy-publicacao-aws.md`](Docs/Process/13-deploy-publicacao-aws.md); passo a passo executável em [`md-usotcc/publicar-aws.md`](md-usotcc/publicar-aws.md) (inclui seção opcional de domínio próprio + certificado Let's Encrypt).
+
 ---
 
 ## 4. Resumo Teórico e Mapeamento do Artigo (TCC)
@@ -286,4 +290,6 @@ Ao gerar ou alterar código neste repositório, siga:
 | Documentação por processo | [Docs/Process/README.md](Docs/Process/README.md) |
 | Guia: rodar Cowrie | [md-usotcc/rodar-cowrie.md](md-usotcc/rodar-cowrie.md) |
 | Guia: testar via PuTTY | [md-usotcc/rodar-putty.md](md-usotcc/rodar-putty.md) |
+| Guia: proteger o dashboard antes de publicar | [md-usotcc/proteger-dashboard.md](md-usotcc/proteger-dashboard.md) |
+| Guia: publicar numa instância AWS EC2 | [md-usotcc/publicar-aws.md](md-usotcc/publicar-aws.md) |
 | Artigo completo (TCC1) | [Docs/TCC_SENDLER/Artigo_TCC1_ENGC_ENGT_CCO.pdf](Docs/TCC_SENDLER/Artigo_TCC1_ENGC_ENGT_CCO.pdf) |

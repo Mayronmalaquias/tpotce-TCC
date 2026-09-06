@@ -28,7 +28,11 @@ class LogWatcher:
         label: str = "LogWatcher",
         thread_name: str = "log-watcher",
     ):
-        self._path        = Path(log_path) if log_path else (default_log or DEFAULT_LOG)
+        base = Path(log_path) if log_path else (default_log or DEFAULT_LOG)
+        # Caminho relativo e resolvido a partir da raiz do repositorio, nao do
+        # diretorio de trabalho: em producao o servico systemd roda com
+        # WorkingDirectory em backend/, onde `data/` nao existe.
+        self._path        = base if base.is_absolute() else (Path(__file__).parent.parent / base)
         self._callback     = on_session
         self._sessions: dict[str, list] = defaultdict(list)
         self._running      = False
@@ -42,6 +46,12 @@ class LogWatcher:
         self._thread  = threading.Thread(target=self._run, daemon=True, name=self._thread_name)
         self._thread.start()
         print(f"[{self._label}] Monitorando: {self._path}")
+        if not self._path.exists():
+            print(
+                f"[{self._label}] AVISO: {self._path} nao existe. O watcher fica "
+                "aguardando o arquivo aparecer — se o honeypot ja estiver rodando, "
+                "confira o caminho configurado."
+            )
 
     def stop(self):
         self._running = False

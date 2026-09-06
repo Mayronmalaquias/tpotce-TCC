@@ -26,6 +26,10 @@
 | Prévia da Defesa | — (não verificável pelo código) |
 | Versão Final do TCC | — (não verificável pelo código) |
 
+## Publicação em produção (2026-08-22)
+
+Deploy real numa instância AWS EC2 (`t3.micro`, free tier) validado de ponta a ponta: 4 containers Docker (Cowrie, Dionaea, nginx, tpotinit) + backend BeeIA como serviço systemd, dashboard protegido por Basic Auth via nginx, sessão de ataque real testada via SSH e classificada corretamente no dashboard em tempo real. Detalhes em [13-deploy-publicacao-aws.md](13-deploy-publicacao-aws.md) e [`md-usotcc/publicar-aws.md`](../../md-usotcc/publicar-aws.md).
+
 > ⚠️ **Atenção:** a data atual do sistema (2026-07-29) é **posterior a todas as datas do cronograma acima**, incluindo "Versão Final do TCC" (07/06/2026). Isso sugere que o projeto já passou dessas fases — possivelmente em andamento de TCC2, pós-defesa, ou o cronograma pode estar desatualizado. **Confirmar com a dupla/orientador o status real antes de assumir que alguma entrega está pendente.**
 
 ## Equipe

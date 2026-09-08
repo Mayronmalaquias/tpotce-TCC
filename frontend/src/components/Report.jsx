@@ -61,6 +61,7 @@ export default function Report() {
         </div>
         <div className="flex items-center gap-2">
           <select
+            aria-label="Período do relatório"
             value={hours}
             onChange={(e) => setHours(Number(e.target.value))}
             disabled={loading}

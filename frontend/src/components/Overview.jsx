@@ -24,13 +24,13 @@ const ATTACK_COLORS = {
 
 function Card({ icon: Icon, label, value, sub, color = 'text-cyan-400' }) {
   return (
-    <div className="bg-surface-800 rounded-xl p-5 flex items-center gap-4 border border-surface-700">
-      <div className={`p-3 rounded-lg bg-surface-700 ${color}`}>
+    <div className="metric-card">
+      <div className={`metric-icon ${color}`}>
         <Icon size={22} />
       </div>
       <div>
         <p className="text-xs text-slate-400 uppercase tracking-wider">{label}</p>
-        <p className="text-2xl font-bold text-slate-100 leading-tight">{value}</p>
+        <p className="metric-value">{typeof value === 'number' ? value.toLocaleString('pt-BR') : value}</p>
         {sub && <p className="text-xs text-slate-500 mt-0.5">{sub}</p>}
       </div>
     </div>
@@ -43,7 +43,7 @@ export default function Overview({ stats }) {
   const total      = Object.values(typeCounts).reduce((a, b) => a + b, 0)
 
   return (
-    <div className="grid grid-cols-2 xl:grid-cols-4 gap-4">
+    <div className="metrics-grid">
       <Card
         icon={AlertTriangle}
         label="Total de Ataques"

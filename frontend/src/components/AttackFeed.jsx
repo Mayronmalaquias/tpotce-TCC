@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { ShieldOff, ShieldCheck } from 'lucide-react'
+import { ShieldOff, ShieldCheck, Search } from 'lucide-react'
 
 const TYPE_STYLES = {
   brute_force:       'bg-red-900/50 text-red-300 border-red-700',
@@ -49,7 +49,7 @@ function HoneypotBadge({ honeypot }) {
 }
 
 function ConfBar({ value }) {
-  const pct = Math.round(value * 100)
+  const pct = Math.max(0, Math.min(100, Math.round((Number(value) || 0) * 100)))
   const color = pct >= 90 ? 'bg-red-500' : pct >= 70 ? 'bg-orange-500' : 'bg-yellow-500'
   return (
     <div className="flex items-center gap-2">
@@ -61,27 +61,32 @@ function ConfBar({ value }) {
   )
 }
 
-export default function AttackFeed({ attacks, onBlock }) {
+export default function AttackFeed({ attacks, onBlock, compact = false }) {
   const [blocking, setBlocking] = useState(null)
+  const [search, setSearch] = useState('')
+  const [honeypot, setHoneypot] = useState('all')
+  const filtered = attacks.filter(a => (honeypot === 'all' || (a.honeypot || 'cowrie') === honeypot) && [a.src_ip, a.country, a.attack_type, TYPE_LABELS[a.attack_type]].some(value => String(value || '').toLowerCase().includes(search.toLowerCase())))
+  const visible = compact ? filtered.slice(0, 6) : filtered
 
   const handleBlock = async (ip) => {
     setBlocking(ip)
-    await onBlock(ip)
-    setBlocking(null)
+    try { await onBlock(ip) } finally { setBlocking(null) }
   }
 
   return (
     <div className="bg-surface-800 rounded-xl border border-surface-700 flex flex-col overflow-hidden h-full">
       <div className="px-5 py-3 border-b border-surface-700 flex items-center justify-between">
-        <h2 className="font-semibold text-slate-200">Feed de Ataques</h2>
-        <span className="text-xs text-slate-500">{attacks.length} sessões</span>
+        <h2 className="font-semibold text-slate-200">Sessões detectadas</h2>
+        <span className="text-xs text-slate-400">{filtered.length} de {attacks.length} sessões carregadas</span>
       </div>
+      <div className="feed-toolbar"><label className="search-input"><Search size={16} /><input aria-label="Buscar nas sessões carregadas" placeholder="Buscar IP, país ou tipo de ataque..." value={search} onChange={e => setSearch(e.target.value)} /></label><select aria-label="Filtrar honeypot nas sessões carregadas" value={honeypot} onChange={e => setHoneypot(e.target.value)}><option value="all">Todos os honeypots</option><option value="cowrie">Cowrie</option><option value="dionaea">Dionaea</option></select></div>
 
-      <div className="overflow-y-auto flex-1">
-        {attacks.length === 0 ? (
-          <div className="flex flex-col items-center justify-center h-40 text-slate-500 text-sm gap-2">
+      <div className="attack-table-scroll">
+        {visible.length === 0 ? (
+          <div className="empty-state">
             <ShieldCheck size={28} />
-            Aguardando ataques...
+            <strong>{attacks.length ? 'Nenhuma sessão encontrada' : 'Nenhum ataque registrado'}</strong>
+            <span>{attacks.length ? 'Tente outro termo ou honeypot.' : 'Os novos eventos aparecerão aqui conforme forem detectados.'}</span>
           </div>
         ) : (
           <table className="w-full text-sm">
@@ -97,7 +102,7 @@ export default function AttackFeed({ attacks, onBlock }) {
               </tr>
             </thead>
             <tbody>
-              {attacks.map((a, i) => (
+              {visible.map((a, i) => (
                 <tr
                   key={a.session_id ?? i}
                   className="border-b border-surface-700/50 hover:bg-surface-700/40 transition-colors"

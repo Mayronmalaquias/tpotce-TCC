@@ -1,48 +1,34 @@
 import { useEffect, useRef, useState } from 'react'
 import { wsUrl } from '../lib/api'
-
-const WS_URL = wsUrl()
-
 export function useWebSocket(onMessage) {
   const [connected, setConnected] = useState(false)
-  const ws = useRef(null)
-  const retryRef = useRef(null)
-
-  const connect = () => {
-    if (ws.current?.readyState === WebSocket.OPEN) return
-
-    const socket = new WebSocket(WS_URL)
-    ws.current = socket
-
-    socket.onopen = () => {
-      setConnected(true)
-      if (retryRef.current) {
-        clearTimeout(retryRef.current)
-        retryRef.current = null
-      }
-    }
-
-    socket.onmessage = (e) => {
-      try {
-        onMessage(JSON.parse(e.data))
-      } catch {}
-    }
-
-    socket.onclose = () => {
-      setConnected(false)
-      retryRef.current = setTimeout(connect, 5000)
-    }
-
-    socket.onerror = () => socket.close()
-  }
-
+  const callback = useRef(onMessage)
+  callback.current = onMessage
   useEffect(() => {
+    let active = true
+    let socket
+    let retry
+    const connect = () => {
+      if (!active) return
+      socket = new WebSocket(wsUrl())
+      socket.onopen = () => { if (active) setConnected(true) }
+      socket.onmessage = (event) => {
+        if (!active) return
+        try { callback.current(JSON.parse(event.data)) } catch {}
+      }
+      socket.onclose = () => {
+        if (!active) return
+        setConnected(false)
+        retry = setTimeout(connect, 5000)
+      }
+      socket.onerror = () => socket.close()
+    }
     connect()
     return () => {
-      clearTimeout(retryRef.current)
-      ws.current?.close()
+      active = false
+      clearTimeout(retry)
+      socket?.close()
     }
   }, [])
-
   return connected
 }

@@ -10,7 +10,6 @@ Interface web do BeeIA. Exibe ataques em tempo real via WebSocket, gráficos de 
 
 ```bash
 npm install
-cp .env.example .env   # defina VITE_API_KEY com o mesmo valor de BEEIA_API_KEY do backend
 npm run dev      # http://localhost:5173 (desenvolvimento)
 npm run build    # gera dist/ para produção
 npm run preview  # testa o build de produção localmente
@@ -18,7 +17,11 @@ npm run preview  # testa o build de produção localmente
 
 > O backend precisa estar rodando em `http://localhost:8000` antes de abrir o frontend.
 
-> `VITE_API_KEY` é embutida no bundle JS em tempo de build — qualquer um que acesse a página consegue extraí-la. Isso é aceitável como defesa em profundidade contra bots, mas **não substitui** proteger o acesso à própria página (ver [`md-usotcc/proteger-dashboard.md`](../md-usotcc/proteger-dashboard.md) antes de publicar).
+O painel abre na tela de login. Informe a chave `BEEIA_API_KEY` configurada no backend: ela é validada em `/api/stats` e mantida em `sessionStorage` apenas para a sessão da aba. O botão **Sair do painel** remove a chave e encerra o WebSocket. Uma resposta HTTP 401 retorna ao login. `VITE_API_KEY` não é mais utilizada nem embutida no bundle.
+
+Para desenvolvimento sem `BEEIA_API_KEY`, use **Acessar ambiente local**. O servidor precisa aceitar a requisição sem chave; o botão não contorna a autenticação. Este fluxo utiliza a autenticação compartilhada existente, sem criar contas de usuário. Para publicação, consulte [`md-usotcc/proteger-dashboard.md`](../md-usotcc/proteger-dashboard.md).
+
+O novo layout responsivo possui navegação para visão geral, ataques, mapa e relatórios com IA. A busca e o filtro por honeypot atuam nas sessões carregadas (100 no REST, até 200 no feed ao vivo); os indicadores e gráficos representam os dados consolidados do servidor.
 
 ---
 
@@ -41,7 +44,7 @@ src/
 │   └── useWebSocket.js       ← conexão WebSocket com reconexão automática
 │
 └── lib/
-    └── api.js                ← authFetch()/wsUrl() — injeta a API key (VITE_API_KEY) nas chamadas
+    └── api.js                ← sessão de acesso e autenticação de REST/WebSocket
 ```
 
 ---

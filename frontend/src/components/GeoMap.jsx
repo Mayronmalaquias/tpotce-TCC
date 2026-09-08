@@ -23,24 +23,26 @@ const LABELS = {
 const HONEYPOT_LABELS = { cowrie: 'Cowrie', dionaea: 'Dionaea' }
 
 export default function GeoMap({ geoData = [] }) {
-  const points = geoData.filter(p => p.latitude && p.longitude)
+  const points = geoData.filter(p => p.latitude != null && p.longitude != null && Number.isFinite(Number(p.latitude)) && Number.isFinite(Number(p.longitude)))
 
   return (
-    <div className="bg-surface-800 rounded-xl border border-surface-700 overflow-hidden">
+    <div className="geo-panel bg-surface-800 rounded-xl border border-surface-700 overflow-hidden">
       <div className="px-5 py-3 border-b border-surface-700 flex items-center justify-between">
         <h2 className="font-semibold text-slate-200">Origem dos Ataques</h2>
         <span className="text-xs text-slate-500">{points.length} IPs geolocalizados</span>
       </div>
 
+      <div className="map-wrap">
+      {!points.length && <div className="map-empty">Aguardando eventos com geolocalização</div>}
       <MapContainer
         center={[20, 0]}
         zoom={2}
         minZoom={2}
-        style={{ height: '340px', width: '100%', background: '#0f172a' }}
+        style={{ height: '390px', width: '100%', background: '#0c0e12' }}
         scrollWheelZoom={false}
       >
         <TileLayer
-          attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>'
+          attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> &copy; <a href="https://carto.com/attributions">CARTO</a>'
           url="https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png"
         />
 
@@ -69,6 +71,7 @@ export default function GeoMap({ geoData = [] }) {
           </CircleMarker>
         ))}
       </MapContainer>
+      </div>
     </div>
   )
 }

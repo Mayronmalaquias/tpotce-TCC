@@ -17,6 +17,14 @@ O BeeIA é um sistema de monitoramento de ameaças cibernéticas que combina qua
 
 ---
 
+## Acesso ao dashboard publicado
+
+O dashboard do BeeIA está disponível em **[https://honeypot.mirondev.com:64298/](https://honeypot.mirondev.com:64298/)** (endereço informado pela equipe em 08/09/2026).
+
+Esse é o link para apresentação ao orientador e avaliação pelo navegador, sem instalação local. Mantenha `https://` e a porta `64298` no endereço. Caso seja solicitado login, obtenha as credenciais com a equipe; elas não devem ser registradas no repositório.
+
+Para os detalhes de configuração do acesso, consulte o [guia de proteção do dashboard](md-usotcc/proteger-dashboard.md).
+
 ## Arquitetura e fluxo de dados
 
 ```

@@ -10,6 +10,12 @@ Este guia cobre as camadas de proteção já implementadas no código e como ati
 
 ---
 
+## Endereço do dashboard publicado
+
+Endereço informado pela equipe em 08/09/2026: **[https://honeypot.mirondev.com:64298/](https://honeypot.mirondev.com:64298/)**.
+
+Use esse link para acesso pelo navegador, incluindo apresentações e testes com o orientador. Caso o proxy solicite autenticação, utilize as credenciais fornecidas pela equipe, sem publicá-las neste documento. O endereço do dashboard não identifica a porta SSH do honeypot.
+
 ## Camada 1 — API key no backend (`BEEIA_API_KEY`)
 
 Toda rota REST (exceto quando a variável está vazia) e o WebSocket exigem uma chave compartilhada.
@@ -38,7 +44,7 @@ Sem `BEEIA_API_KEY` definida, o backend roda sem autenticação (avisa no log `[
 
 ```bash
 # .env da raiz
-CORS_ORIGINS=https://seu-dominio.com
+CORS_ORIGINS=https://honeypot.mirondev.com:64298
 ```
 
 Impede que **outros sites** façam requisições ao seu backend a partir do navegador de um visitante (CSRF-like via JS). Não impede chamadas diretas via `curl`/scripts — para isso, use a Camada 1 (API key) e a Camada 3 (rede).

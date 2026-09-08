@@ -286,4 +286,5 @@ Ao gerar ou alterar código neste repositório, siga:
 | Documentação por processo | [Docs/Process/README.md](Docs/Process/README.md) |
 | Guia: rodar Cowrie | [md-usotcc/rodar-cowrie.md](md-usotcc/rodar-cowrie.md) |
 | Guia: testar via PuTTY | [md-usotcc/rodar-putty.md](md-usotcc/rodar-putty.md) |
+| Guia: segurança do host | [md-usotcc/seguranca-host.md](md-usotcc/seguranca-host.md) |
 | Artigo completo (TCC1) | [Docs/TCC_SENDLER/Artigo_TCC1_ENGC_ENGT_CCO.pdf](Docs/TCC_SENDLER/Artigo_TCC1_ENGC_ENGT_CCO.pdf) |

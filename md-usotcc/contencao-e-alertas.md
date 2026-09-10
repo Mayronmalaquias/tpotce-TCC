@@ -402,22 +402,60 @@ Correção aplicada:
 
 Estado do venv antes da mudança preservado em `/tmp/freeze_antes.txt` na VM.
 
-### O modelo Dionaea treinado com dados reais não está em uso
+### Modelo Dionaea: o repositório estava atrás da VM, não o contrário
 
-`backend/dionaea_classifier.py` carrega `dionaea_rf.joblib` — o modelo de **dados
-sintéticos**, 4 classes, 10 features. O `dionaea_real_rf.joblib`, treinado com
-2.100 sessões reais (6 classes, 7 features, `cv_f1_macro` 0,8426), está no disco
-mas **nenhum código o referencia**.
+Uma versão anterior desta seção afirmava que o backend classificava com o modelo
+sintético. **Isso estava errado, e a correção importa.** A afirmação veio de ler
+`backend/dionaea_classifier.py` no checkout local, que está no commit `a29eb1e4`.
+A VM roda `b7ac139e`, onde o Dionaea real já foi implementado. O que estava
+desatualizado era o repositório.
 
-Consequência: toda classificação Dionaea gravada no banco veio do modelo
-sintético. Trocar não é uma linha de código — os dois modelos têm conjuntos de
-features diferentes, então `_extract` precisa ser ajustado para as 7 features do
-modelo real, e as classes mudam de 4 para 6.
+A VM já usava `dionaea_real_rf.joblib` — 2.100 sessões reais, 6 classes, 7
+features, `cv_f1_macro` 0,8426. Prova disso está no próprio banco: das 673 sessões
+Dionaea, 32 estavam classificadas como `credential_bruteforce` e 14 como
+`connection_flood`, rótulos que o modelo sintético **não consegue emitir** — ele
+só tem 4 classes.
 
-Não foi alterado aqui: muda o comportamento da classificação em produção e é
-decisão de vocês, não uma correção óbvia. Mas **precisa ser decidido antes** de
-medir desempenho, senão a avaliação mede o modelo sintético enquanto o texto do
-TCC fala do treino real.
+O que a versão de produção resolve, e que o repositório não tinha:
+
+- **Formato do log.** O Dionaea real escreve `{"connection": {...}, "src_ip": ...}`,
+  não o `{"eventid": "dionaea.connection.tcp.accept"}` do gerador sintético.
+- **Sessão sintetizada.** O log real não tem campo `session` nem evento de
+  encerramento. O `LogWatcher` agrupava por `ev.get("session")` e descartava o
+  evento quando o campo faltava — ou seja, **100% do tráfego do Dionaea era
+  ignorado em silêncio**. Agora agrupa por IP de origem e fecha por inatividade
+  (`DIONAEA_SESSION_TIMEOUT_S`, padrão 300 s).
+- **Sete features, não dez.** `has_download` só existe no `dionaea.sqlite`,
+  `payload_size_avg` não é registrado em lugar nenhum e `has_shellcode` depende da
+  tabela `emu_profiles`, vazia em 14 dias de captura. Treinar com features
+  indisponíveis em produção criaria distorção entre treino e execução.
+
+Trazidos da VM para o repositório: `backend/dionaea_classifier.py`,
+`backend/main.py`, `backend/log_watcher.py`, `backend/tests/`,
+`data_pipeline/extract_dionaea_real.py`, `data_pipeline/label_dionaea_real.py`,
+`ml/dionaea/train_real.py`, `ml/experiments/run_experiments.py` e
+`Docs/artigo-tcc2-consolidado.md`. Os dois testes que vieram junto passam.
+
+### O bug real estava no dashboard
+
+O frontend tinha as sete classes do Cowrie fixas em quatro componentes, e
+`Charts.jsx` **descartava em silêncio** qualquer classe fora dessa lista:
+`buildBarData` só somava se `attack_type in map[label]`, e `buildPieData`
+iterava apenas as chaves conhecidas.
+
+Consequência ao vivo: as **46 sessões** `credential_bruteforce` e
+`connection_flood` já classificadas não apareciam em nenhum gráfico. O honeypot
+capturava, o modelo classificava certo, o banco guardava — e o painel escondia.
+
+Corrigido em `AttackFeed.jsx`, `Charts.jsx`, `GeoMap.jsx` e `Overview.jsx`: as
+duas classes ganharam cor e rótulo próprios, e `Charts.jsx` passou a montar a
+lista de tipos pela **união** entre os conhecidos e os presentes nos dados, com
+cor e rótulo de reserva. Uma classe nova no modelo não some mais do gráfico
+porque alguém esqueceu de cadastrá-la.
+
+Build refeito e publicado em `frontend/dist` na VM em 10/09/2026 às 17:52 UTC;
+o container `nginx` serve esse diretório por bind mount, sem precisar reiniciar.
+Bundles antigos que tinham ficado para trás no diretório foram removidos.
 
 ---
 
@@ -446,9 +484,11 @@ sudo systemctl list-timers 'beeia-*'
 ## 5. O que fica em aberto
 
 1. **Confirmar as duas assinaturas de email.** Bloqueia a entrega de todos os alertas.
-2. **Decidir qual modelo Dionaea vale** (seção 3). Hoje roda o sintético; o
-   treinado com dados reais está no disco sem ser usado. Medir desempenho antes
-   de decidir isso mede o modelo errado.
+2. **Reconciliar o repositório com a VM por inteiro.** O pipeline Dionaea foi
+   trazido, mas o checkout local continua no commit `a29eb1e4` e a VM em
+   `b7ac139e`: pode haver outras diferenças ainda não levantadas. Enquanto isso
+   durar, ler só o repositório leva a conclusões erradas — foi o que aconteceu na
+   seção 3. Comparar os dois lados antes de qualquer afirmação sobre o sistema.
 3. Porta 2222 já está restrita a `<IP_ADMIN>/32` no security group — a
    afirmação de `verificacao-vm-2026-09-10.md` de que estava em `0.0.0.0/0` está
    desatualizada. O dashboard em 64298 continua aberto para `0.0.0.0/0`, protegido

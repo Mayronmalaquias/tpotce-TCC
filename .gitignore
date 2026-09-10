@@ -22,3 +22,6 @@ install_tpot.log
 
 # Lista de IPs proprios a excluir da avaliacao (contem IP administrativo)
 data_pipeline/excluded_ips.local.txt
+
+# cache do pytest
+.pytest_cache/

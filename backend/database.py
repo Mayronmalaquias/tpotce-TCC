@@ -191,6 +191,66 @@ def get_top_ips(limit: int = 10) -> list:
         return [dict(r) for r in rows]
 
 
+def get_ip_detail(ip: str, limit: int = 200) -> dict:
+    """Tudo o que um IP tentou: resumo, o que ele fez, e as sessoes uma a uma.
+
+    O resumo sai de uma agregacao sobre todas as sessoes do IP, e nao das
+    `limit` linhas devolvidas — senao um IP com centenas de sessoes teria
+    contagens erradas na tela.
+    """
+    with _db() as conn:
+        resumo = conn.execute("""
+            SELECT COUNT(*)                       AS total_sessoes,
+                   MIN(timestamp)                 AS primeira,
+                   MAX(timestamp)                 AS ultima,
+                   MAX(blocked)                   AS blocked,
+                   COUNT(DISTINCT honeypot)       AS honeypots,
+                   SUM(login_attempts)            AS login_attempts,
+                   SUM(login_success)             AS login_success,
+                   SUM(command_count)             AS command_count,
+                   SUM(connection_count)          AS connection_count,
+                   MAX(unique_ports)              AS unique_ports,
+                   SUM(session_duration_s)        AS tempo_total_s,
+                   MAX(has_reverse_shell)         AS has_reverse_shell,
+                   MAX(has_wget_curl)             AS has_wget_curl,
+                   MAX(has_recon_commands)        AS has_recon_commands,
+                   MAX(has_file_download)         AS has_file_download,
+                   MAX(has_shellcode)             AS has_shellcode,
+                   MAX(country)                   AS country,
+                   MAX(city)                      AS city
+            FROM   attacks WHERE src_ip = ?
+        """, (ip,)).fetchone()
+
+        if not resumo or not resumo["total_sessoes"]:
+            return {}
+
+        por_tipo = conn.execute("""
+            SELECT attack_type, COUNT(*) AS count, MAX(confidence) AS max_confidence
+            FROM   attacks WHERE src_ip = ?
+            GROUP  BY attack_type ORDER BY count DESC
+        """, (ip,)).fetchall()
+
+        por_honeypot = conn.execute("""
+            SELECT honeypot, COUNT(*) AS count
+            FROM   attacks WHERE src_ip = ?
+            GROUP  BY honeypot ORDER BY count DESC
+        """, (ip,)).fetchall()
+
+        sessoes = conn.execute("""
+            SELECT * FROM attacks WHERE src_ip = ?
+            ORDER  BY created_at DESC LIMIT ?
+        """, (ip, limit)).fetchall()
+
+        return {
+            "src_ip":       ip,
+            "resumo":       dict(resumo),
+            "por_tipo":     [dict(r) for r in por_tipo],
+            "por_honeypot": [dict(r) for r in por_honeypot],
+            "sessoes":      [dict(r) for r in sessoes],
+            "sessoes_truncadas": resumo["total_sessoes"] > len(sessoes),
+        }
+
+
 def block_ip(ip: str, reason: str = "ML detection") -> None:
     with _db() as conn:
         count = conn.execute(

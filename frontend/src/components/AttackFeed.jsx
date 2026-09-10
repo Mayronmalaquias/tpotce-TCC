@@ -66,7 +66,7 @@ function ConfBar({ value }) {
   )
 }
 
-export default function AttackFeed({ attacks, onBlock, compact = false }) {
+export default function AttackFeed({ attacks, onBlock, onInspect, compact = false }) {
   const [blocking, setBlocking] = useState(null)
   const [search, setSearch] = useState('')
   const [honeypot, setHoneypot] = useState('all')
@@ -112,7 +112,13 @@ export default function AttackFeed({ attacks, onBlock, compact = false }) {
                   key={a.session_id ?? i}
                   className="border-b border-surface-700/50 hover:bg-surface-700/40 transition-colors"
                 >
-                  <td className="px-4 py-2 font-mono text-cyan-300 text-xs">{a.src_ip}</td>
+                  <td className="px-4 py-2 font-mono text-cyan-300 text-xs">
+                    {onInspect ? (
+                      <button className="ip-link" onClick={() => onInspect(a.src_ip)} title={`Ver tudo o que ${a.src_ip} tentou`}>
+                        {a.src_ip}
+                      </button>
+                    ) : a.src_ip}
+                  </td>
                   <td className="px-4 py-2"><HoneypotBadge honeypot={a.honeypot} /></td>
                   <td className="px-4 py-2"><Badge type={a.attack_type} /></td>
                   <td className="px-4 py-2"><ConfBar value={a.confidence} /></td>

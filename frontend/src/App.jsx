@@ -6,6 +6,7 @@ import AttackFeed from './components/AttackFeed'
 import Charts     from './components/Charts'
 import GeoMap     from './components/GeoMap'
 import Report     from './components/Report'
+import IpDetail   from './components/IpDetail'
 import { useWebSocket } from './hooks/useWebSocket'
 import { authFetch, getSession, saveSession, clearSession } from './lib/api'
 
@@ -42,6 +43,7 @@ const TITLES = {
 
 function Dashboard({ onLogout }) {
   const [page, setPage] = useState('overview')
+  const [inspectedIp, setInspectedIp] = useState(null)
   const [error, setError] = useState('')
   const [updatedAt, setUpdatedAt] = useState(null)
   const [stats,     setStats]     = useState(null)
@@ -149,12 +151,13 @@ function Dashboard({ onLogout }) {
             <div className="section-label"><h2>Panorama de ameaças</h2><span>Dados consolidados do ambiente</span></div>
             <div className="analysis-grid"><GeoMap geoData={geoData} /><Charts chartData={chartData} typeCounts={stats?.attack_type_counts ?? {}} /></div>
             <div className="section-label"><h2>Atividade recente</h2><button onClick={() => setPage('attacks')}>Explorar ataques <ArrowUpRight size={15} /></button></div>
-            <AttackFeed attacks={attacks} onBlock={handleBlock} compact />
+            <AttackFeed attacks={attacks} onBlock={handleBlock} onInspect={setInspectedIp} compact />
             <button className="report-callout" onClick={() => setPage('reports')}><span className="callout-icon"><Sparkles size={22} /></span><span><strong>Dos eventos à inteligência.</strong><small>Gere uma análise das ameaças com recomendações de mitigação.</small></span><ArrowUpRight size={21} /></button>
           </>}
-          {page === 'attacks' && <AttackFeed attacks={attacks} onBlock={handleBlock} />}
+          {page === 'attacks' && <AttackFeed attacks={attacks} onBlock={handleBlock} onInspect={setInspectedIp} />}
           {page === 'map' && <GeoMap geoData={geoData} />}
           {page === 'reports' && <Report />}
+          <IpDetail ip={inspectedIp} onClose={() => setInspectedIp(null)} onBlock={handleBlock} />
           <footer className="dashboard-footer"><span>BeeIA / Threat Intelligence</span><span>{updatedAt ? `Última sincronização às ${updatedAt.toLocaleTimeString('pt-BR')}` : 'Aguardando sincronização'}</span></footer>
         </main>
       </div>

@@ -38,12 +38,14 @@ from typing import Optional
 
 from fastapi import APIRouter, Depends, FastAPI, HTTPException, Query, WebSocket, WebSocketDisconnect
 from fastapi.middleware.cors import CORSMiddleware
+from pydantic import BaseModel, Field
 
 import database
 import firewall
 import geo
 import llm
-from auth import auth_enabled, require_api_key, ws_key_is_valid
+from auth import (auth_enabled, configured_key, login_enabled, require_api_key,
+                  verify_login, ws_key_is_valid)
 from classifier import classifier as cowrie_classifier
 from dionaea_classifier import classifier as dionaea_classifier
 from log_watcher import LogWatcher
@@ -272,6 +274,32 @@ _report_rate_limit = RateLimiter(max_calls=5, period_s=600)   # 5 a cada 10 min 
 
 api_router = APIRouter(dependencies=[Depends(require_api_key), Depends(_global_rate_limit)])
 
+# ── login ─────────────────────────────────────────────────────────────────────
+#
+# Fica FORA do api_router de proposito: e a unica rota que precisa responder a
+# quem ainda nao tem a chave. O limite e por IP e bem mais apertado que o
+# global — junto com o custo do PBKDF2, e o que torna a forca bruta cara.
+_login_rate_limit = RateLimiter(max_calls=5, period_s=300)   # 5 tentativas a cada 5 min por IP
+
+
+class LoginRequest(BaseModel):
+    username: str = Field(max_length=200)
+    password: str = Field(max_length=1024)
+
+
+@app.post("/api/login", dependencies=[Depends(_login_rate_limit)])
+def login(body: LoginRequest):
+    if not login_enabled():
+        raise HTTPException(
+            status_code=503,
+            detail="Login por usuario e senha nao esta configurado no servidor.",
+        )
+    if not verify_login(body.username, body.password):
+        # Mesma mensagem para usuario inexistente e senha errada.
+        raise HTTPException(status_code=401, detail="Usuario ou senha invalidos.")
+    return {"key": configured_key()}
+
+
 # ── rotas ─────────────────────────────────────────────────────────────────────
 
 @api_router.get("/api/stats")
@@ -297,6 +325,15 @@ def chart(hours: int = Query(24, ge=1, le=168)):
 @api_router.get("/api/attacks/top-ips")
 def top_ips(limit: int = Query(10, ge=1, le=50)):
     return database.get_top_ips(limit=limit)
+
+
+@api_router.get("/api/ip/{ip}")
+def ip_detail(ip: str, limit: int = Query(200, ge=1, le=1000)):
+    """Tudo o que um IP tentou: resumo, tipos de ataque e sessoes uma a uma."""
+    detail = database.get_ip_detail(ip, limit=limit)
+    if not detail:
+        raise HTTPException(status_code=404, detail="Nenhum registro para este IP.")
+    return detail
 
 
 @api_router.get("/api/geo")

@@ -491,7 +491,7 @@ sudo systemctl list-timers 'beeia-*'
 
    Levantamento feito em 10/09/2026, normalizando quebras de linha. **A
    divergência é mútua** — cada lado tem conteúdo que o outro não tem, então isto
-   é um merge a ser decidido por vocês, não uma cópia de mão única:
+   é um merge a ser deliberado pela equipe técnica, não uma cópia de mão única:
 
    | Arquivo | Situação |
    |---|---|

@@ -95,6 +95,6 @@ docker restart cowrie-tcc
 
 ---
 
-### Próximo passo para o seu TCC
+### Integração com o Pipeline
 
-Agora que a coleta está automatizada, você pode avançar para a etapa de tratamento dos logs e modelagem de detecção de anomalias com IA.
+Com a coleta em execução, os logs estruturados gerados em `~/cowrie-data/logs/cowrie.json` alimentam os extratores de features (`data_pipeline/extract_features.py`) e o pipeline de inferência em tempo real.

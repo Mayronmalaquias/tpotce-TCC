@@ -207,13 +207,14 @@ rotulagem em que os próprios humanos discordam não sustenta conclusão.
 
 ## 4. O que fica pendente
 
-1. **Rotular as 200 sessões.** É trabalho de vocês — nenhum rótulo foi gerado
-   automaticamente e nenhum número de desempenho existe até isso acontecer.
-2. **Decidir o que fazer com as classes que nunca são previstas.** Duas das
-   quatro classes do Cowrie não apareceram uma vez sequer em 2.439 sessões. Ou o
-   tráfego real não tem esses comportamentos, ou o modelo não os reconhece — a
-   rotulagem manual vai distinguir os dois casos, e essa é uma das discussões
-   mais fortes que o TCC pode ter.
-3. **Ampliar o período** se a banca exigir uma semana cheia. Hoje são 4,75 dias.
+1. **Concluir a rotulagem manual das 200 sessões:** A verdade-terreno requer
+   anotação humana independente; nenhum rótulo foi sintetizado automaticamente
+   para evitar contaminação metodológica antes da apuração formal.
+2. **Investigação das classes não observadas em produção:** Duas das quatro
+   classes do Cowrie não foram previstas durante as 2.439 sessões reais. A rotulagem
+   humana permitirá distinguir se o tráfego da amostra de fato não apresentou tais
+   vetores ou se o modelo treinado apresentou falsos negativos.
+3. **Expansão temporal da captura:** Caso haja requisito de observação prolongada,
+   o monitoramento pode ser mantido ativo para consolidação de janela superior a 7 dias.
 4. Ver também [contenção e alertas](contencao-e-alertas.md) e o
    [plano de avaliação](proxima-etapa-coleta-real.md).

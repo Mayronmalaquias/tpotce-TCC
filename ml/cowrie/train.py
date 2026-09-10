@@ -15,12 +15,14 @@ Uso:
 
 import argparse
 import json
+import platform
 import sys
 from pathlib import Path
 
 import joblib
 import numpy as np
 import pandas as pd
+import sklearn
 from sklearn.ensemble import RandomForestClassifier
 from sklearn.metrics import classification_report, confusion_matrix
 from sklearn.model_selection import StratifiedKFold, cross_val_score, train_test_split
@@ -216,6 +218,15 @@ def train(dataset_path: str, model_type: str = "rf", seed: int = 42) -> None:
     meta = {
         "honeypot":          "cowrie",
         "model_type":        model_type,
+        # Sem isto nao da para saber depois qual versao gerou o pickle, e o
+        # backend so descobre a divergencia como um warning em tempo de execucao.
+        "environment": {
+            "python":       platform.python_version(),
+            "scikit_learn": sklearn.__version__,
+            "numpy":        np.__version__,
+            "pandas":       pd.__version__,
+            "joblib":       joblib.__version__,
+        },
         "feature_cols":      FEATURE_COLS,
         "classes":           classes,
         "cv_f1_macro_mean":  round(float(cv_f1.mean()), 4),

@@ -1,0 +1,11 @@
+[Unit]
+Description=Check BeeIA host integrity every hour
+
+[Timer]
+OnCalendar=hourly
+Persistent=true
+RandomizedDelaySec=120
+Unit=beeia-integrity.service
+
+[Install]
+WantedBy=timers.target

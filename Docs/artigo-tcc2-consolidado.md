@@ -55,9 +55,16 @@ supervisionada, engenharia de features e LLM como camada de interpretação.
 
 🆕 Um ponto do referencial ganhou sustentação empírica inesperada: a afirmação
 de que **a qualidade das features importa mais que a escolha do algoritmo**.
-Os resultados da Seção 5 mostram os três algoritmos empatados dentro do desvio
-padrão, enquanto trocar as features (sintéticas → reais) muda o desempenho
-completamente. O algoritmo é a parte que menos importa.
+Três medições independentes convergem para isso:
+
+1. Random Forest, SVM e XGBoost empatam dentro do desvio padrão (Seção 5.1).
+2. LSTM e Transformer também empatam entre si (Seção 5.5).
+3. Trocar a **representação** — de 13 features agregadas para a sequência crua
+   de eventos — produz ganho maior que qualquer troca de algoritmo (Seção 5.5),
+   e trocar a **origem dos dados** (sintéticos → reais) muda o desempenho por
+   completo (Seção 5.6).
+
+O algoritmo é, consistentemente, a variável que menos importa.
 
 ---
 
@@ -92,6 +99,12 @@ existem no tráfego real:
    chave SSH (remove a feature mais discriminativa da classe);
 4. *dropper* que também abre canal de retorno (caso real de botnets tipo Mirai);
 5. sessões truncadas logo após o *handshake* e 5% de erro de rotulagem.
+
+🆕 **Segunda adição ao método:** uma representação alternativa dos dados. Além
+do vetor de 13 features agregadas, cada sessão passou a ser codificada também
+como **sequência de eventos**, preservando ordem, ritmo e comandos executados.
+Isso permite comparar features escritas à mão contra features aprendidas pelo
+próprio modelo (Seção 5.5), mantendo dataset e divisão idênticos.
 
 ---
 
@@ -224,7 +237,82 @@ uma não muda nada porque a outra cobre. A leitura correta é **redundância
 mútua**. Medir a contribuição real exigiria remoção em grupos ou importância por
 permutação — registrado como trabalho futuro.
 
-### 5.5 Validação com tráfego real ⭐
+### 5.5 Features aprendidas vs. features escritas à mão
+
+🆕 **Resultado novo.** Responde a uma pergunta que o TCC1 não levanta.
+
+**O problema.** O pipeline reduz cada sessão a 13 números agregados: quantos
+logins, quantos comandos, tem `wget` sim ou não. Isso descarta o que talvez
+seja a informação mais rica de um ataque — a **ordem** dos eventos, o **ritmo**
+entre eles e **quais** comandos foram executados. Uma sessão é, na origem, uma
+sequência:
+
+```
+connect → login.failed → login.failed → login.success
+        → "uname -a" → "cat /etc/passwd" → "wget http://.../bot.sh" → closed
+```
+
+**A pergunta:** um modelo que lê a sequência crua aprende representações
+melhores do que as features que escrevemos manualmente?
+
+**Representação.** Cada evento vira uma tripla: tipo do evento (categórico),
+binário invocado (`wget`, `cat`, `uname` — argumentos descartados, pois URLs e
+caminhos aleatórios são ruído) e intervalo desde o evento anterior em
+`log(1 + ms)`. A escala logarítmica é necessária porque os intervalos vão de
+dezenas de milissegundos (automação) a dezenas de segundos (operador humano);
+em escala linear o modelo enxergaria apenas os extremos.
+
+**Protocolo.** 40.000 sessões geradas com ruído 0,6, divididas em 27.200 de
+treino, 4.800 de validação e 8.000 de teste. As três abordagens usam
+**exatamente o mesmo dataset e o mesmo split**, o que torna a comparação direta.
+
+| Classe | LSTM | Transformer | Random Forest |
+|---|---|---|---|
+| `brute_force` | **0,9404** | 0,9356 | 0,9202 |
+| `command_injection` | 0,9276 | **0,9292** | 0,9158 |
+| `malware_download` | 0,9246 | **0,9257** | 0,9173 |
+| `recon` | **0,9586** | 0,9585 | 0,9476 |
+| **F1-macro** | **0,9378** | 0,9373 | 0,9252 |
+| Acurácia | 0,9377 | 0,9373 | 0,9253 |
+
+**Os modelos de sequência vencem** — por +0,0126 (LSTM) e +0,0121
+(Transformer). A vantagem é consistente: as duas redes superam o Random Forest
+em **todas as quatro classes**, não em uma isolada, o que afasta a hipótese de
+variação por acaso numa classe específica.
+
+**LSTM e Transformer empatam.** A diferença de 0,0005 é ruído — para
+comparação, o próprio Random Forest varia ±0,0058 entre sementes (Seção 5.1).
+Não há vencedor entre as duas arquiteturas neste problema.
+
+**O custo é o dado decisivo:**
+
+| Abordagem | Tempo de treino | Parâmetros |
+|---|---|---|
+| Random Forest | segundos | — |
+| LSTM | 150 min (25 épocas) | ~350 mil |
+| Transformer | 497 min (parada antecipada) | 630 mil |
+
+O Transformer levou **3,3× mais tempo que o LSTM para chegar ao mesmo lugar**.
+E o LSTM custou ordens de magnitude mais que o Random Forest para ganhar 1,3
+ponto percentual.
+
+**Interpretação para o texto.** O enquadramento honesto não é "redes neurais
+venceram". É: *features aprendidas superam as manuais, mas por margem pequena e
+a um custo desproporcional*. Para o BeeIA em produção — que classifica sessões
+em tempo real numa instância `t3.micro` com 1 GiB de RAM — o Random Forest
+continua sendo a escolha correta, agora por um motivo **medido**, não presumido.
+
+Isso fecha de forma coerente com a Seção 5.1: lá, o pré-processamento importou
+mais que o algoritmo; aqui, a representação importou mais que a arquitetura.
+Ambos apontam para a mesma tese do referencial teórico — **a qualidade da
+entrada pesa mais que a escolha do modelo**.
+
+> ⚠️ **Ressalva obrigatória no texto.** É **uma execução de cada arquitetura**.
+> Com o desvio conhecido do Random Forest (±0,0058), a diferença de 0,0126 é
+> sugestiva mas **não estatisticamente estabelecida**. Afirmar superioridade
+> exigiria repetir o treino neural com múltiplas sementes.
+
+### 5.6 Validação com tráfego real ⭐
 
 🆕 **Resultado novo e principal contribuição do TCC2.**
 
@@ -243,7 +331,7 @@ O sistema foi exposto à internet e operou por **14 dias corridos**
 Distribuição por protocolo: `smbd` 69% (porta 445), `mysqld` (3306), `mssqld`
 (1433), `httpd` (443), além de FTP, PPTP, MQTT e MSRPC.
 
-#### 5.5.1 O modelo treinado em dados sintéticos aplicado ao tráfego real
+#### 5.6.1 O modelo treinado em dados sintéticos aplicado ao tráfego real
 
 | Classe prevista | Sessões | Confiança média |
 |---|---|---|
@@ -255,7 +343,7 @@ Distribuição por protocolo: `smbd` 69% (porta 445), `mysqld` (3306), `mssqld`
 **O modelo colapsa em uma única classe.** Duas das quatro classes que ele
 aprendeu nunca são previstas. A confiança média cai de 1,00 para 0,70.
 
-#### 5.5.2 Causa: deslocamento de distribuição
+#### 5.6.2 Causa: deslocamento de distribuição
 
 | Feature | Treino sintético | Tráfego real |
 |---|---|---|
@@ -278,14 +366,14 @@ registra em lugar nenhum.
 de suas quatro classes, porque as features que as definem não existem em
 produção. Duas das dez features do vetor são indisponíveis no mundo real.
 
-#### 5.5.3 Consequência operacional
+#### 5.6.3 Consequência operacional
 
 O bloqueio automático dispara com confiança ≥ 0,95. Em 2.100 sessões reais,
 **uma única** ultrapassou esse limiar. A resposta automática descrita no artigo
 está, na prática, **inerte em produção** — e isso só foi descoberto porque houve
 medição em ambiente real.
 
-#### 5.5.4 A taxonomia sintética não corresponde ao tráfego real
+#### 5.6.4 A taxonomia sintética não corresponde ao tráfego real
 
 Duas premissas do dataset original não se sustentam:
 
@@ -313,7 +401,7 @@ Taxonomia derivada da observação:
 | `port_scan` | 11 | 0,5% |
 | `exploit_attempt` | 9 | 0,4% |
 
-#### 5.5.5 O comportamento carrega sinal real
+#### 5.6.5 O comportamento carrega sinal real
 
 Treinado sobre os rótulos reais, o modelo alcança **F1-macro 0,868**. Mas como
 os rótulos derivam de regras sobre as próprias features, esse número é
@@ -346,7 +434,7 @@ permanece em 0,333 nos dois cenários** (acerta 2 de 9). Não é falha de
 generalização — é ausência de feature. O sinal de exploração está nas tabelas
 `dcerpc*` do Dionaea, que não integram o vetor de features atual.
 
-### 5.6 Itens do TCC1 sem artefato verificável
+### 5.7 Itens do TCC1 sem artefato verificável
 
 ⚠️ **Precisam ser removidos, refeitos ou marcados como não reproduzíveis.**
 
@@ -379,6 +467,10 @@ elimina o problema de partida a frio; LLM como camada de interpretação.
    que o próprio TCC1 registrava.
 4. **Correção metodológica** na comparação entre algoritmos, com efeito medido
    e isolado.
+5. **Comparação entre features escritas à mão e features aprendidas** por
+   modelos de sequência (LSTM e Transformer) sobre eventos crus, com dataset e
+   divisão idênticos — as aprendidas vencem em todas as classes, mas por margem
+   pequena e a um custo de treino ordens de magnitude maior.
 
 ### 6.2 Limitações
 
@@ -402,6 +494,13 @@ API de geolocalização.
    classe), que exige métricas por classe — a acurácia global é enganosa.
 6. **Captura de 14 dias e um único ponto de coleta**, sem variação geográfica ou
    temporal.
+7. **A comparação entre features manuais e aprendidas usa uma única execução por
+   arquitetura.** Dado o desvio de ±0,0058 entre sementes do Random Forest, a
+   diferença de 0,0126 é sugestiva mas não estatisticamente estabelecida.
+8. **Os modelos de sequência foram avaliados apenas em dados sintéticos.** O
+   volume de sessões reais do Cowrie coletado até aqui é insuficiente para
+   treiná-los, então não se sabe se a vantagem observada sobrevive ao tráfego
+   real — justamente o cenário em que o modelo tabular já falhou (Seção 5.6).
 
 ### 6.3 Trabalhos futuros
 
@@ -420,6 +519,12 @@ séries temporais; exportação de IoCs em STIX/TAXII para MISP.
    confiança, hoje centrada em 0,70.
 5. **Ablação por permutação ou em grupos**, para medir importância de features
    correlacionadas corretamente.
+6. **Repetir o treino dos modelos de sequência com múltiplas sementes**, para
+   converter a vantagem observada em afirmação estatística. Com o cache de
+   sequências implementado, cada execução dispensa o reprocessamento do log.
+7. **Avaliar os modelos de sequência em tráfego real**, assim que o volume de
+   sessões do Cowrie permitir — é a pergunta que decide se a representação
+   sequencial ajuda onde mais importa.
 
 ---
 
@@ -465,10 +570,21 @@ cd ../../data_pipeline
 python extract_dionaea_real.py --sqlite ../data/captura_real/dionaea.sqlite.1
 python label_dionaea_real.py
 
-# Teste de regressão da rotação de log
-cd ..
+# Modelos de sequência: LSTM, Transformer e baseline Random Forest
+cd ../ml/sequence
+python train.py --comparar --epocas 25 \
+    --features ../../data/dataset/training_features_grande.csv
+# -> resultados/comparacao.json (salvo a cada arquitetura concluída)
+
+# Testes de regressão
+cd ../..
 python backend/tests/test_log_watcher.py
+python backend/tests/test_sessao_sintetizada.py
 ```
+
+> O treino dos modelos de sequência leva horas. O script salva o resultado ao
+> concluir cada arquitetura e **retoma** o que já foi feito numa execução
+> anterior, de modo que uma interrupção não custa repetir o que já rodou.
 
 | Artefato | Caminho |
 |---|---|
@@ -478,6 +594,8 @@ python backend/tests/test_log_watcher.py
 | Sessões reais rotuladas | `data/captura_real/dionaea_real_labeled.csv` |
 | Predições do modelo sintético sobre o real | `data/captura_real/dionaea_real_predicted.csv` |
 | Gabarito para validação manual | `data/captura_real/gabarito_para_revisar.csv` |
+| Comparação features manuais × aprendidas | `ml/sequence/resultados/comparacao.json` |
+| Checkpoints dos modelos de sequência | `ml/sequence/resultados/{lstm,transformer}.pt` |
 
 ---
 
@@ -488,7 +606,8 @@ python backend/tests/test_log_watcher.py
 | 5.1 | **Reescrever** a explicação do desempenho do SVM: normalização ausente, não limitação do algoritmo. Atualizar a tabela comparativa. |
 | 5.1 | **Manter** a escolha do Random Forest, alterando a justificativa para empate técnico com vantagem de custo de inferência. |
 | 5.2 e 5.3 | **Remover ou marcar** como não reproduzíveis os testes com Hydra, Metasploit e Red Teaming, na ausência de artefatos. |
-| 5 (novas) | **Acrescentar** degradação por ruído, curva de aprendizado, ablação e — principal — validação com tráfego real. |
+| 5 (novas) | **Acrescentar** degradação por ruído, curva de aprendizado, ablação, comparação entre features manuais e aprendidas e — principal — validação com tráfego real. |
+| 3 | **Acrescentar** a representação sequencial como segunda codificação dos dados, ao lado do vetor de 13 features. |
 | 6.1 | **Acrescentar** as quatro contribuições novas. |
 | 6.2 | **Acrescentar** as seis limitações medidas. |
 | 6.3 | **Repriorizar** trabalhos futuros a partir da medição. |

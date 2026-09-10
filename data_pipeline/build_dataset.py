@@ -22,25 +22,28 @@ LABELS_PATH   = "../data/dataset/session_labels.csv"
 FEATURES_PATH = "../data/dataset/training_features.csv"
 
 
-def main(sessions_per_class: int = 500, seed: int = 42) -> None:
-    print(f"[1/2] Gerando logs sintéticos ({sessions_per_class} sessões por classe)...\n")
+def main(sessions_per_class: int = 500, seed: int = 42, noise: float = 0.0,
+         features_path: str = FEATURES_PATH) -> None:
+    print(f"[1/2] Gerando logs sintéticos ({sessions_per_class} sessões por classe, ruído={noise})...")
+    print()
     generate_dataset(
         logs_path=LOGS_PATH,
         labels_path=LABELS_PATH,
         sessions_per_class=sessions_per_class,
         seed=seed,
+        noise=noise,
     )
 
     print(f"\n[2/2] Extraindo features por sessão...")
     extract_features(
         logs_path=LOGS_PATH,
         labels_path=LABELS_PATH,
-        output_path=FEATURES_PATH,
+        output_path=features_path,
     )
 
     print("\n" + "-" * 50)
     print("Dataset pronto!")
-    print(f"  Arquivo: {FEATURES_PATH}")
+    print(f"  Arquivo: {features_path}")
     print()
     print("  Features numéricas (13):")
     print("    login_attempt_count    — volume de tentativas de login")
@@ -68,5 +71,10 @@ if __name__ == "__main__":
                         help="Sessões por classe de ataque (padrão: 500)")
     parser.add_argument("--seed", type=int, default=42,
                         help="Semente aleatória para reprodutibilidade (padrão: 42)")
+    parser.add_argument("--noise", type=float, default=0.0,
+                        help="Ambiguidade injetada, 0.0 a 1.0 (padrão: 0.0 = classes "
+                             "perfeitamente separáveis)")
+    parser.add_argument("--output", default=FEATURES_PATH,
+                        help=f"CSV de saída (padrão: {FEATURES_PATH})")
     args = parser.parse_args()
-    main(args.sessions, args.seed)
+    main(args.sessions, args.seed, args.noise, args.output)

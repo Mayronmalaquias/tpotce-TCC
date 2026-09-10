@@ -67,8 +67,9 @@ Dionaea (SMB/MySQL)     por sessão         SVM · XGBoost     Painel em tempo r
 2. **Features comportamentais** — 13 por sessão no Cowrie, 10 no Dionaea:
    volume e cadência de login, comandos executados, indicadores de *reverse
    shell* e download. **O endereço IP não é usado como feature.**
-3. **Treino** — comparação de três classificadores com validação cruzada
-   estratificada (k=5) e 30 execuções independentes.
+3. **Treino** — duas representações comparadas com o mesmo dado e a mesma
+   divisão: 13 features agregadas (Random Forest, SVM, XGBoost) e a sequência
+   crua de eventos (LSTM, Transformer).
 4. **Validação em produção** — 14 dias de exposição real e comparação direta
    entre o desempenho sintético e o real.
 
@@ -76,20 +77,25 @@ Dionaea (SMB/MySQL)     por sessão         SVM · XGBoost     Painel em tempo r
 
 ## 4. Resultados
 
-### 4.1 Os três algoritmos empatam
+### 4.1 O algoritmo é o que menos importa
 
-Com pré-processamento correto e dataset não trivial, 30 execuções:
+Mesmo dataset, mesma divisão, 8.000 sessões de teste:
 
-| Algoritmo | F1-macro | Desvio |
-|---|---|---|
-| SVM | 0,9281 | ± 0,0056 |
-| Random Forest | 0,9265 | ± 0,0058 |
-| XGBoost | 0,9265 | ± 0,0063 |
+| Abordagem | Entrada | F1-macro | Custo de treino |
+|---|---|---|---|
+| **LSTM** | sequência de eventos | **0,9378** | 150 min |
+| **Transformer** | sequência de eventos | 0,9373 | 497 min |
+| Random Forest | 13 features manuais | 0,9252 | segundos |
 
-> **Achado metodológico:** o SVM parecia inferior (0,78) apenas por falta de
-> normalização das features. Corrigido o pré-processamento, sobe para 0,92 e
-> torna-se o mais rápido a treinar. **A escolha do algoritmo importa menos que
-> a preparação dos dados.**
+Num experimento à parte, com 30 execuções independentes, **Random Forest, SVM e
+XGBoost empatam entre si** (0,9265 · 0,9281 · 0,9265; desvio ±0,006). Trocar o
+algoritmo não move o resultado; trocar a **representação da entrada**, sim.
+
+> **Dois achados metodológicos.** O SVM parecia inferior (0,78) apenas por
+> falta de normalização; corrigido o pré-processamento, empata com os demais.
+> E ler a sequência crua de eventos supera as features escritas à mão, mas por
+> só 1,3 ponto percentual e a um custo milhares de vezes maior — em produção,
+> o Random Forest segue sendo a escolha certa, agora por um motivo **medido**.
 
 ### 4.2 O resultado central — DESTAQUE VISUAL PRINCIPAL
 
@@ -141,10 +147,12 @@ apenas 0,042.
    reconstruía a regra que criou os dados.
 2. **Features comportamentais transferem para o mundo real** (queda de 0,042 ao
    remover indicadores explícitos); features dependentes de indicador não.
-3. **Implantar de verdade revelou o que a inspeção de código não revelou:**
+3. **A representação pesa mais que o algoritmo.** Trocar o classificador não
+   move o resultado; trocar a forma de representar a sessão, sim.
+4. **Implantar de verdade revelou o que a inspeção de código não revelou:**
    cinco defeitos críticos, três deles de **falha silenciosa** — o serviço
    permanecia ativo, sem erro, capturando nada.
-4. Em segurança, **um detector que falha em silêncio é pior que um que falha
+5. Em segurança, **um detector que falha em silêncio é pior que um que falha
    ruidosamente**: produz falsa sensação de cobertura.
 
 **Trabalhos futuros:** features de DCERPC para viabilizar a detecção de
@@ -197,6 +205,9 @@ Estes números merecem corpo tipográfico grande, isolados do texto corrido:
 2. **Curva de degradação por ruído** — linha descendente de 1,0000 a 0,8874.
    Mostra visualmente que o F1 = 1,0 era propriedade do dataset, não do modelo.
 3. **Diagrama do pipeline** — os quatro blocos da Seção 3, horizontal.
+   Se sobrar espaço, vale ilustrar a diferença de representação: de um lado a
+   sessão como sequência de eventos, do outro reduzida a 13 números. É a imagem
+   que explica a Seção 4.1 sem precisar de texto.
 4. **Mapa-múndi com os IPs atacantes** — apelo visual forte; a distribuição
    geográfica dos 1.576 IPs já está no banco. Use se sobrar espaço.
 5. **Captura do painel** em operação, pequena, como prova de funcionamento.
@@ -214,3 +225,6 @@ corte nesta ordem:** Seção 4.1 (tabela dos três algoritmos, mantendo só a
 citação), depois as referências 4 e 5, depois a Seção 1 reduzida a duas frases.
 
 **Não corte** a Seção 4.2 nem a 4.3 — são a contribuição do trabalho.
+
+Se a Seção 4.1 precisar encolher, remova a linha do Transformer: o contraste
+entre representações se sustenta com o par LSTM × Random Forest.

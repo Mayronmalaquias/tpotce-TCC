@@ -1,5 +1,5 @@
 # dados gerados
-data/
+data/*
 _data/
 
 # modelos treinados (arquivos grandes)
@@ -20,8 +20,25 @@ install_tpot.log
 # segredos (API keys, credenciais)
 .env
 
-# Lista de IPs proprios a excluir da avaliacao (contem IP administrativo)
-data_pipeline/excluded_ips.local.txt
+# Evidencia da captura real do Dionaea: os CSVs derivados sao pequenos e
+# sustentam os resultados do TCC, entao sao versionados. A captura bruta
+# (.json/.sqlite/.gz, ~69 MB) continua de fora.
+!data/captura_real/
+data/captura_real/*
+!data/captura_real/*.csv
+
+# Log transitorio das rodadas do harness experimental
+ml/experiments/run.log
+
+# Checkpoints dos modelos de sequencia (~2,5 MB cada) e logs de treino.
+# Seguem a mesma politica de ml/**/models/. O que sustenta os resultados no
+# artigo e o comparacao.json, esse sim versionado.
+ml/sequence/resultados/*.pt
+ml/sequence/*.log
+ml/sequence/*.err
 
 # cache do pytest
 .pytest_cache/
+
+# Lista de IPs proprios a excluir da avaliacao (contem IP administrativo)
+data_pipeline/excluded_ips.local.txt

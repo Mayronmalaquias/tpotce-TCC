@@ -247,6 +247,8 @@ Os honeypots são feitos para ficar públicos; **o dashboard/API não são**. An
 
 Rate limiting já vem ativo por padrão (60 req/min geral, 5 a cada 10 min em `/api/report`). Guia completo: [`md-usotcc/proteger-dashboard.md`](md-usotcc/proteger-dashboard.md).
 
+Para publicar numa instância real (AWS EC2, tier gratuito) — incluindo domínio próprio e certificado confiável via Let's Encrypt — veja [`md-usotcc/publicar-aws.md`](md-usotcc/publicar-aws.md) e [`Docs/Process/13-deploy-publicacao-aws.md`](Docs/Process/13-deploy-publicacao-aws.md).
+
 ---
 
 ## Documentação específica por módulo
@@ -258,8 +260,11 @@ Rate limiting já vem ativo por padrão (60 req/min geral, 5 a cada 10 min em `/
 | Modelo ML (Dionaea) | [ml/dionaea/README.md](ml/dionaea/README.md) |
 | Backend (API) | [backend/README.md](backend/README.md) |
 | Frontend (Dashboard) | [frontend/README.md](frontend/README.md) |
+| **Documento consolidado para o TCC2** | [Docs/artigo-tcc2-consolidado.md](Docs/artigo-tcc2-consolidado.md) |
+| **Conteúdo do banner** | [Docs/banner-tcc.md](Docs/banner-tcc.md) |
 | Documentação por processo | [Docs/Process/](Docs/Process/README.md) |
 | Guia: proteger o dashboard antes de publicar | [md-usotcc/proteger-dashboard.md](md-usotcc/proteger-dashboard.md) |
+| Guia: publicar numa instância AWS EC2 | [md-usotcc/publicar-aws.md](md-usotcc/publicar-aws.md) |
 
 ---
 

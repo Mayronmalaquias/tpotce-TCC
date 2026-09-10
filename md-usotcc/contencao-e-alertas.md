@@ -2,7 +2,8 @@
 
 Fecha os itens 1 e 3 do plano de continuidade. Todas as evidências abaixo foram
 observadas na VM `<INSTANCE_ID>` (us-east-2, conta <CONTA_AWS>) e na conta
-AWS correspondente, em 10/09/2026 entre 16:39 e 16:53 UTC.
+AWS correspondente, em 10/09/2026 entre 16:39 e 17:16 UTC — incluindo um reboot
+planejado às 17:07 para testar a persistência.
 
 > Este repositório é público. `<CONTA_AWS>`, `<INSTANCE_ID>`, `<IP_ADMIN>`,
 > `<SECURITY_GROUP>` e `<IP_PRIVADO_HOST>` são marcadores: os valores reais estão
@@ -63,8 +64,35 @@ para `docker.service` e reinicia os containers. Foi o que ocorreu às 16:48 UTC 
 10/09/2026 — **interrupção de coleta de poucos segundos, registrada aqui** por ser
 exigência do plano de coleta. Reaplique a contenção apenas quando necessário.
 
-O reinício completo da VM ainda **não** foi testado. `enabled` mais o drop-in
-indicam que as regras voltam no boot, mas isso é inferência, não observação.
+### Teste de reboot — 10/09/2026, 17:07 UTC
+
+A VM foi reiniciada de propósito para observar a persistência, em vez de inferi-la.
+Linha do tempo lida do journal do boot:
+
+| Instante (UTC) | Evento |
+|---|---|
+| 17:07:14 | `systemctl reboot` emitido |
+| 17:07:34 | novo boot |
+| 17:07:38.075 | `beeia-containment.service` iniciando |
+| 17:07:38.662 | *Containment applied atomically; Docker tables preserved* |
+| 17:07:38.674 | contenção concluída |
+| 17:07:39.777 | `docker.service` iniciando |
+| 17:07:43.386 | Docker pronto, containers carregados |
+
+A contenção terminou **1,1 s antes** de o Docker começar: não existe janela em que
+os containers rodem sem bloqueio.
+
+A impressão digital regravada no boot é **byte a byte igual** à de antes do reboot
+(`19cd96b21ac48111760a8fea427d35f72f50e09885b6a9deed199b732d6e8a86`), ou seja, as
+regras foram reconstruídas idênticas. `check` passou.
+
+O teste de saída foi repetido depois do reboot com o mesmo roteiro: internet TCP e
+HTTP, DNS externo, metadados AWS, host (2222 e 8000), rede privada e resolução de
+nome continuaram **bloqueados nos dois honeypots**, e o host continuou saindo.
+
+Voltaram ativos sem intervenção: contenção, Docker, `beeia-backend`, os quatro
+containers e os três timers. Dashboard respondeu 401 pelo domínio e as portas 21,
+22, 23 e 445 aceitaram conexão da internet.
 
 ### Verificação contínua
 
@@ -247,7 +275,88 @@ chega — a transição observada prova o caminho inteiro: VM → CloudWatch →
 
 ---
 
-## 3. Comandos de operação
+## 3. O que o reboot revelou
+
+### Um alerta real, não simulado
+
+No primeiro ciclo depois do reboot o watchdog acusou `integrity_not_ok`: o monitor
+de integridade tinha encontrado **33 diferenças** em relação à referência das
+16:09 UTC. Foi o primeiro alerta legítimo do sistema, não um teste.
+
+Todas as diferenças foram contabilizadas por origem, sem sobra:
+
+| Origem | Quantidade |
+|---|---:|
+| Arquivos que nós mesmos instalamos (`/etc/beeia-security`, `/opt/beeia-security`, unidades systemd e seus symlinks) | 19 |
+| Pacote `nftables-1.0.4-3.amzn2023.0.3.x86_64`, instalado para a contenção | 13 |
+| `glibc` — `/etc/ld.so.cache`, regravado ao instalar o pacote | 1 |
+| **Sem explicação** | **0** |
+
+A checagem de origem usou `rpm -qf` em cada caminho. Nenhum arquivo ficou órfão.
+
+### Renovação da referência
+
+Seguido o procedimento já documentado em [segurança do host](seguranca-host.md):
+revisar, arquivar fora da VM, e só então renovar explicitamente.
+
+1. Backup externo executado às 17:13:09 UTC, levando para o S3 a referência antiga
+   **e** o relatório que registra a alteração
+   (`.../backup-20260910T171309257624Z.tar.gz`, 13.993.047 bytes,
+   `restore_verified: true`).
+2. Referência antiga preservada na VM como
+   `/var/lib/beeia-integrity/baseline-arquivada-20260910T160930Z.json`
+   (SHA-256 `62d832ab0ddf095d5175ccd622f67fcf5e4676f42ca8295e2a12324a2de44475`).
+3. Nova referência criada às 17:14:46 UTC: 35.447 entradas, SHA-256
+   `00e1c5ee8970b6de4112b7104876073c97a5213d68473c213fc96158492063f0`.
+4. `check` seguinte: `status=unchanged`, zero diferenças, saída 0.
+5. Watchdog publicou **mensagem de recuperação** às 17:15:28 UTC e voltou a
+   `problems: []`.
+
+O ciclo inteiro — detectar, alertar, corrigir, recuperar — rodou de ponta a ponta
+com dados reais. A nova referência continua sendo o estado observado de um host
+já exposto, não uma instalação atestada como limpa.
+
+### Interrupções de coleta a registrar
+
+| Janela (UTC) | Duração | Causa |
+|---|---|---|
+| 10/09/2026 ~16:48 | segundos | reinício da contenção propagou restart ao Docker |
+| 10/09/2026 17:07:14 – 17:07:45 | ~31 s | reboot planejado da VM |
+
+Ingestão confirmada depois do reboot: os honeypots voltaram a escrever log e o
+backend voltou a gravar no banco (3.102 → 3.104 sessões).
+
+### Sessões de teste próprias, a excluir da avaliação
+
+Conexões TCP feitas por nós a partir do IP administrativo (`<IP_ADMIN>`) para
+verificar alcance de entrada. **Não são tráfego de atacante** e precisam sair da
+amostra de avaliação:
+
+| id | session_id | honeypot | timestamp (UTC) | classe prevista |
+|---:|---|---|---|---|
+| 3089 | `eb997411a1e3` | cowrie | 2026-09-10T15:58:13Z | brute_force |
+| 3100 | `a4ec7910d346` | cowrie | 2026-09-10T16:49:03Z | brute_force |
+| 3103 | `ee407fc4aab6` | cowrie | 2026-09-10T17:16:19Z | brute_force |
+| 3104 | `435e8004bb3a` | cowrie | 2026-09-10T17:16:42Z | brute_force |
+
+Filtro: `select * from attacks where src_ip = '<IP_ADMIN>'`. Note que as quatro
+foram classificadas como `brute_force` sendo apenas conexões TCP abertas e
+fechadas, sem tentativa de login — é um erro de classificação observável e
+serve de exemplo concreto para a discussão de limitações.
+
+### Achado colateral no backend
+
+O log do `beeia-backend` no boot mostra `InconsistentVersionWarning` do
+scikit-learn: os modelos foram serializados com a versão 1.5.2 e estão sendo
+carregados com a 1.9.0, em `DecisionTreeClassifier`, `RandomForestClassifier` e
+`LabelEncoder`. A própria biblioteca avisa que isso pode produzir resultados
+inválidos. Não tem relação com a contenção, mas **afeta a validade das
+classificações do TCC** e precisa ser resolvido antes de medir desempenho:
+fixar a versão do scikit-learn ou retreinar os modelos na versão em uso.
+
+---
+
+## 4. Comandos de operação
 
 ```bash
 # contenção
@@ -269,11 +378,11 @@ sudo systemctl list-timers 'beeia-*'
 
 ---
 
-## 4. O que fica em aberto
+## 5. O que fica em aberto
 
 1. **Confirmar as duas assinaturas de email.** Bloqueia a entrega de todos os alertas.
-2. **Testar reinício completo da VM** para observar (não inferir) que a contenção
-   volta antes do Docker. Custa uma interrupção curta de coleta.
+2. **Corrigir a incompatibilidade de versão do scikit-learn** antes de medir
+   acurácia (seção 3). Afeta a validade dos resultados, não a segurança.
 3. Porta 2222 já está restrita a `<IP_ADMIN>/32` no security group — a
    afirmação de `verificacao-vm-2026-09-10.md` de que estava em `0.0.0.0/0` está
    desatualizada. O dashboard em 64298 continua aberto para `0.0.0.0/0`, protegido

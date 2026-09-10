@@ -1,0 +1,18 @@
+[Unit]
+Description=BeeIA external backup and restore verification
+After=network-online.target
+Wants=network-online.target
+OnFailure=beeia-notify-failure@%n.service
+
+[Service]
+Type=oneshot
+ExecStart=/usr/bin/python3 /opt/beeia-security/security_operations.py backup
+User=root
+UMask=0077
+Nice=10
+IOSchedulingClass=idle
+NoNewPrivileges=true
+ProtectSystem=strict
+ReadWritePaths=/var/lib/beeia-ops
+PrivateTmp=true
+TimeoutStartSec=45min

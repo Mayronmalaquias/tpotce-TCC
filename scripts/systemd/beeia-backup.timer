@@ -1,0 +1,11 @@
+[Unit]
+Description=BeeIA daily external backup
+
+[Timer]
+OnCalendar=*-*-* 03:15:00 UTC
+RandomizedDelaySec=120
+Persistent=true
+Unit=beeia-backup.service
+
+[Install]
+WantedBy=timers.target

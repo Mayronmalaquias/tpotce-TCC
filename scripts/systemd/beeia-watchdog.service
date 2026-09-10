@@ -1,0 +1,15 @@
+[Unit]
+Description=BeeIA security and backup supervision
+After=network-online.target docker.service
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+ExecStart=/usr/bin/python3 /opt/beeia-security/security_operations.py watch
+User=root
+UMask=0077
+NoNewPrivileges=true
+ProtectSystem=strict
+ReadWritePaths=/var/lib/beeia-ops
+PrivateTmp=true
+TimeoutStartSec=4min

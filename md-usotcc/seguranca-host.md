@@ -1,86 +1,84 @@
-# Guia de Segurança, Contenção e Integridade do Host (VM)
+﻿# Integridade e contenção do host BeeIA
 
-Este documento descreve as diretrizes de segurança aplicadas à máquina hospedeira (Host Linux) onde os honeypots do **BeeIA** estão em execução, detalhando a mitigação contra **Honeypot Breakout (Container Escape)** e os procedimentos de **FIM (File Integrity Monitoring)**.
+O script antigo `scripts/check_host_integrity.sh` é uma auditoria manual auxiliar:
+produz hashes novos sem comparar com uma referência fixa. Não comprova ausência de invasão.
 
----
+## Monitor contínuo
 
-## 1. Contexto e Modelo de Ameaça
+`scripts/host_integrity.py` mantém referência SHA-256 e compara conteúdo, permissões,
+proprietário/grupo e destinos de links. Detecta inclusões, remoções e alterações em
+executáveis, bibliotecas, /usr/local, /boot, /etc, cron, chaves SSH dos usuários
+existentes e no próprio monitor. Links não são percorridos; as raízes reais padrão
+em /usr também são inventariadas. Aplicações fora dessas raízes exigem ajuste de escopo.
+Logs e downloads dos honeypots não integram a referência do host.
 
-Honeypots como Cowrie e Dionaea são projetados para atrair tráfego hostil da internet. Ao interagir com o honeypot, atacantes podem tentar:
-1. **Explorar o container** (simulação interativa ou injeção de payload).
-2. **Honeypot Escape (Fuga do Container):** Utilizar exploits de kernel ou falhas de configuração do Docker para escapar do ambiente de emulação e comprometer o sistema operacional host.
-3. **Adulteração de Binários e Persistência:** Instalar rootkits ou alterar executáveis e bibliotecas essenciais (`/bin/ps`, `/bin/ls`, `/usr/bin/ss`, bibliotecas `.so`) para ocultar processos e manter acesso ao servidor físico/VM.
+Uma referência criada depois da exposição registra o estado atual, não o estado
+da instalação. Antes dela, preservar evidências e revisar pacotes, logins, contas,
+serviços, persistência e rede. Indícios de comprometimento exigem investigação e
+possível reconstrução a partir de imagem confiável.
 
----
+Um invasor com root pode adulterar o monitor e o banco de pacotes. Manter cópia da
+referência e dos relatórios fora da VM, sob controle separado. O próprio debsums
+[documenta seu uso limitado como ferramenta de segurança](https://manpages.debian.org/unstable/debsums/debsums.1.en.html).
 
-## 2. Camadas de Contenção Implementadas (Docker)
+## Instalação no host Linux, fora dos containers
 
-Para impedir que invasões nos honeypots alcancem o sistema operacional da máquina host, o BeeIA adota as seguintes defesas por design:
-
-| Camada de Segurança | Implementação | Propósito |
-|---|---|---|
-| **Contêineres não privilegiados** | `privileged: false` | Impede que o processo dentro do container tenha acesso direto aos dispositivos de hardware do host. |
-| **Sistema de Arquivos Read-Only** | `read_only: true` (no `docker-compose.yml`) | O sistema de arquivos raiz do container é somente-leitura. Malwares baixados pelo atacante não conseguem alterar binários do container. |
-| **Volumes Estritos e Isolados** | Apenas `/data/...` montados | Nenhum diretório sensível do host (`/etc`, `/bin`, `/root`) é compartilhado com os honeypots. |
-| **Isolamento do Docker Socket** | `/var/run/docker.sock` inacessível | Honeypots não possuem acesso ao socket do Docker, impossibilitando a criação de containers com privilégios de root sobre o host. |
-| **Armazenamento Volátil** | `tmpfs` para `/tmp` | Dados transitórios são armazenados na memória RAM (`tmpfs`), sendo descartados no reinício. |
-
----
-
-## 3. Como Executar a Auditoria de Integridade no Host
-
-Foi criado o script automatizado [`scripts/check_host_integrity.sh`](../scripts/check_host_integrity.sh). Ele realiza a checagem completa de integridade de binários, contenção do docker, usuários e portas abertas.
-
-### Passo a passo na VM:
+Após a auditoria inicial, no diretório do projeto:
 
 ```bash
-# 1. Acesse o diretório do projeto na VM
-cd ~/tpotce-TCC
-
-# 2. Garanta permissão de execução
-chmod +x scripts/check_host_integrity.sh
-
-# 3. Execute como root (ou sudo)
-sudo bash scripts/check_host_integrity.sh
+sudo bash scripts/install_host_integrity.sh
+sudo systemctl enable beeia-integrity.timer
+sudo python3 /opt/beeia-security/host_integrity.py init
+sudo python3 /opt/beeia-security/host_integrity.py check
+sudo systemctl start beeia-integrity.timer
+sudo systemctl start beeia-integrity.service
+sudo systemctl list-timers beeia-integrity.timer
+sudo journalctl -u beeia-integrity.service --since today
+sudo cat /var/lib/beeia-integrity/latest.json
+sudo sha256sum /var/lib/beeia-integrity/baseline.json
 ```
 
-### O que o script faz automaticamente:
-1. **Verificação de Isolamento Docker:** Inspeciona os containers ativos para confirmar que não operam em modo `--privileged` e que não têm acesso ao `docker.sock`.
-2. **Integridade de Binários e Bibliotecas (`debsums`):** Compara os hashes MD5 de todos os executáveis do sistema (`/bin`, `/sbin`, `/usr/bin`, `/usr/lib`) com os hashes oficiais assinados pelo repositório da distribuição Debian/Ubuntu.
-3. **Auditoria de Privilégios (UID 0):** Checa se existem contas ocultas com privilégio de root em `/etc/passwd`.
-4. **Persistência e Chaves SSH:** Inspeciona `authorized_keys` e crontabs do sistema.
-5. **Portas e Conexões Ativas:** Analisa sockets abertos (`ss -tulpn`) e conexões de saída ativas (verificando se o host não foi transformado em botnet ou abriu reverse shell).
-6. **Geração de Baseline SHA-256:** Gera um arquivo de hashes dos binários administrativos críticos em `reports/baseline_critical_binaries_<data>.sha256`.
+O instalador não cria nem substitui referências. `init` recusa sobrescrita e
+inventários incompletos. O timer verifica a cada hora, com atraso aleatório de até
+dois minutos e recuperação após desligamento. Saídas: 0 sem alterações, 1 alterações,
+2 erro/checagem incompleta. Alterações e erros deixam o serviço falho no systemd.
 
-O relatório final é salvo em `reports/host_integrity_<data>.log`.
+Relatórios: /var/lib/beeia-integrity/reports/ e latest.json. Se a execução falhar
+antes de gerar relatório, latest.json pode ser antigo: verificar checked_at,
+resultado do serviço e journal. Não há envio de email ou alerta externo; acompanhar
+o serviço e exportar evidências regularmente. Monitorar disco e definir retenção
+após preservação externa: relatórios não são apagados automaticamente.
 
----
+Atualizações legítimas também alteram hashes. Revisar diferenças, arquivar a
+referência e relatórios externamente, documentar a manutenção e só então renovar
+explicitamente a referência. Nunca recriá-la automaticamente no timer.
 
-## 4. Monitoramento Contínuo com AIDE (File Integrity Monitoring)
+## Contenção observada no Compose
 
-Para garantir integridade contínua a longo prazo (como exigido em ambientes de segurança de alta conformidade):
+Cowrie e Dionaea têm raiz somente leitura, redes distintas e não montam o socket
+Docker. Essas medidas reduzem risco, mas não garantem ausência de escape.
+Dionaea recebe NET_ADMIN. O tpotinit usa rede do host, NET_ADMIN e socket Docker:
+é componente privilegiado da infraestrutura. Montagem de socket com :ro não torna
+a API Docker somente leitura.
 
-```bash
-# 1. Instalar o AIDE
-sudo apt update && sudo apt install -y aide
+Redes distintas não comprovam bloqueio de saída: verificar regras efetivas no host
+e na nuvem e testar cada honeypot. Porta SSH alternativa não substitui autenticação
+por chave e controle de acesso.
 
-# 2. Inicializar o banco de hashes de referência
-sudo aideinit
+## Bloqueio de saída e alertas
 
-# 3. Mover o banco gerado para o arquivo ativo
-sudo cp /var/lib/aide/aide.db.new /var/lib/aide/aide.db
+Desde 10/09/2026 o host aplica `scripts/honeypot_firewall.py` (tabela nftables
+`inet beeia_containment`, fail-closed, reaplicada no boot antes do Docker) e
+`scripts/security_operations.py` (watchdog a cada cinco minutos, alerta por email
+via SNS, heartbeat externo e backup diário verificado em bucket S3 imutável).
+Regras, testes controlados por honeypot, unidades systemd, recursos AWS e limites
+estão em [contenção e alertas](contencao-e-alertas.md). Isso cobre os honeypots em
+ponte Docker; o `tpotinit`, em rede do host, continua fora do escopo da contenção.
 
-# 4. Para verificar a integridade a qualquer momento:
-sudo aide --check
-```
+## Evidências para o TCC
 
----
-
-## 5. Texto Sugerido para a Seção de Metodologia / Infraestrutura do TCC
-
-Copie e adapte o trecho abaixo no artigo/monografia:
-
-> **Garantia de Isolamento e Monitoramento de Integridade do Host:**
->
-> *"Tendo em vista que a exposição de honeypots de média e alta interatividade à internet aberta acarreta o risco inerente de honeypot breakout (fuga de container) e comprometimento da máquina hospedeira, foram adotados mecanismos rigorosos de contenção. Os honeypots Cowrie e Dionaea operam em contêineres Docker isolados, executados sem privilégios administrativos (`privileged: false`), com sistema de arquivos raiz montado em modo somente-leitura (`read_only: true`), e sem permissão de acesso ao socket de gerenciamento do Docker (`/var/run/docker.sock`). Adicionalmente, implementou-se uma rotina de monitoramento de integridade de arquivos (File Integrity Monitoring – FIM) no host Linux, baseada na verificação contínua dos hashes criptográficos de binários e bibliotecas de sistema via `debsums` e `AIDE`, além de auditoria periódica de persistência e portas de rede, assegurando que o ambiente hospedeiro permaneça não comprometido durante todo o período de coleta."*
-
+Registrar início da coleta, commit implantado, digests das imagens, auditoria
+inicial, origem/hash da referência, timer e relatórios. Demonstrar detecção em
+arquivos temporários, sem adulterar binários reais. Distinguir código implementado,
+implantação verificada e limitações. Uma checagem sem diferenças não permite afirmar
+que a máquina permaneceu não comprometida durante toda a coleta.

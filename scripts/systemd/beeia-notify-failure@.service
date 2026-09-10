@@ -1,0 +1,14 @@
+[Unit]
+Description=Notify BeeIA service failure %i
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+ExecStart=/usr/bin/python3 /opt/beeia-security/security_operations.py notify-failure --unit %i
+User=root
+UMask=0077
+NoNewPrivileges=true
+ProtectSystem=strict
+ReadWritePaths=/var/lib/beeia-ops
+PrivateTmp=true

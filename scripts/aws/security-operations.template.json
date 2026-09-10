@@ -1,0 +1,94 @@
+{
+  "AWSTemplateFormatVersion": "2010-09-09",
+  "Description": "BeeIA private immutable backups, email alerts and external heartbeat alarm",
+  "Parameters": {
+    "InstanceRoleName": {"Type": "String"},
+    "InstanceId": {"Type": "String", "AllowedPattern": "i-[0-9a-f]+"},
+    "BackupBucketName": {"Type": "String"},
+    "EmailOne": {"Type": "String"},
+    "EmailTwo": {"Type": "String"}
+  },
+  "Resources": {
+    "Backups": {
+      "Type": "AWS::S3::Bucket",
+      "DeletionPolicy": "Retain",
+      "UpdateReplacePolicy": "Retain",
+      "Properties": {
+        "BucketName": {"Ref": "BackupBucketName"},
+        "VersioningConfiguration": {"Status": "Enabled"},
+        "OwnershipControls": {"Rules": [{"ObjectOwnership": "BucketOwnerEnforced"}]},
+        "PublicAccessBlockConfiguration": {
+          "BlockPublicAcls": true, "BlockPublicPolicy": true,
+          "IgnorePublicAcls": true, "RestrictPublicBuckets": true
+        },
+        "BucketEncryption": {"ServerSideEncryptionConfiguration": [
+          {"ServerSideEncryptionByDefault": {"SSEAlgorithm": "AES256"}}
+        ]},
+        "ObjectLockEnabled": true,
+        "ObjectLockConfiguration": {
+          "ObjectLockEnabled": "Enabled",
+          "Rule": {"DefaultRetention": {"Mode": "GOVERNANCE", "Days": 14}}
+        },
+        "LifecycleConfiguration": {"Rules": [{
+          "Id": "RetainThirtyDays", "Status": "Enabled", "Prefix": "",
+          "ExpirationInDays": 30, "NoncurrentVersionExpiration": {"NoncurrentDays": 30},
+          "AbortIncompleteMultipartUpload": {"DaysAfterInitiation": 7}
+        }]}
+      }
+    },
+    "BucketPolicy": {
+      "Type": "AWS::S3::BucketPolicy",
+      "Properties": {
+        "Bucket": {"Ref": "Backups"},
+        "PolicyDocument": {"Version": "2012-10-17", "Statement": [{
+          "Effect": "Deny", "Principal": "*", "Action": "s3:*",
+          "Resource": [{"Fn::GetAtt": ["Backups", "Arn"]}, {"Fn::Sub": "${Backups.Arn}/*"}],
+          "Condition": {"Bool": {"aws:SecureTransport": "false"}}
+        }]}
+      }
+    },
+    "Alerts": {"Type": "AWS::SNS::Topic", "Properties": {
+      "TopicName": "beeia-security-alerts", "DisplayName": "BeeIA Security"
+    }},
+    "EmailOneSubscription": {"Type": "AWS::SNS::Subscription", "Properties": {
+      "Protocol": "email", "Endpoint": {"Ref": "EmailOne"}, "TopicArn": {"Ref": "Alerts"}
+    }},
+    "EmailTwoSubscription": {"Type": "AWS::SNS::Subscription", "Properties": {
+      "Protocol": "email", "Endpoint": {"Ref": "EmailTwo"}, "TopicArn": {"Ref": "Alerts"}
+    }},
+    "AlertPolicy": {"Type": "AWS::SNS::TopicPolicy", "Properties": {
+      "Topics": [{"Ref": "Alerts"}],
+      "PolicyDocument": {"Version": "2012-10-17", "Statement": [{
+        "Effect": "Allow", "Principal": {"Service": "cloudwatch.amazonaws.com"},
+        "Action": "sns:Publish", "Resource": {"Ref": "Alerts"},
+        "Condition": {"StringEquals": {"aws:SourceAccount": {"Ref": "AWS::AccountId"}},
+          "ArnEquals": {"aws:SourceArn": {"Fn::Sub": "arn:${AWS::Partition}:cloudwatch:${AWS::Region}:${AWS::AccountId}:alarm:beeia-security-heartbeat"}}}
+      }]}
+    }},
+    "InstancePermissions": {"Type": "AWS::IAM::Policy", "Properties": {
+      "PolicyName": "beeia-security-operations", "Roles": [{"Ref": "InstanceRoleName"}],
+      "PolicyDocument": {"Version": "2012-10-17", "Statement": [
+        {"Effect": "Allow", "Action": ["s3:PutObject", "s3:GetObject", "s3:GetObjectVersion"],
+          "Resource": {"Fn::Sub": "${Backups.Arn}/${InstanceId}/*"}},
+        {"Effect": "Allow", "Action": "s3:GetBucketLocation", "Resource": {"Fn::GetAtt": ["Backups", "Arn"]}},
+        {"Effect": "Allow", "Action": "sns:Publish", "Resource": {"Ref": "Alerts"}},
+        {"Effect": "Allow", "Action": "cloudwatch:PutMetricData", "Resource": "*",
+          "Condition": {"StringEquals": {"cloudwatch:namespace": "BeeIA/Security"}}}
+      ]}
+    }},
+    "HeartbeatAlarm": {"Type": "AWS::CloudWatch::Alarm", "Properties": {
+      "AlarmName": "beeia-security-heartbeat",
+      "AlarmDescription": "BeeIA monitor failed to report for three five-minute periods; investigate VM, timer or AWS access",
+      "Namespace": "BeeIA/Security", "MetricName": "Heartbeat", "Statistic": "Sum",
+      "Dimensions": [{"Name": "InstanceId", "Value": {"Ref": "InstanceId"}}],
+      "Period": 300, "EvaluationPeriods": 3, "DatapointsToAlarm": 3,
+      "Threshold": 1, "ComparisonOperator": "LessThanThreshold", "TreatMissingData": "breaching",
+      "AlarmActions": [{"Ref": "Alerts"}], "OKActions": [{"Ref": "Alerts"}]
+    }}
+  },
+  "Outputs": {
+    "BackupBucket": {"Value": {"Ref": "Backups"}},
+    "AlertTopicArn": {"Value": {"Ref": "Alerts"}},
+    "HeartbeatAlarm": {"Value": {"Ref": "HeartbeatAlarm"}}
+  }
+}

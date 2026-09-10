@@ -1,0 +1,18 @@
+[Unit]
+Description=BeeIA honeypot egress containment
+After=local-fs.target
+Before=docker.service
+
+[Service]
+Type=oneshot
+RemainAfterExit=yes
+ExecStart=/usr/bin/python3 /opt/beeia-security/honeypot_firewall.py apply
+ExecReload=/usr/bin/python3 /opt/beeia-security/honeypot_firewall.py apply
+User=root
+UMask=0077
+NoNewPrivileges=true
+ProtectSystem=strict
+ReadWritePaths=/etc/beeia-security
+
+[Install]
+WantedBy=multi-user.target

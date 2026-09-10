@@ -275,7 +275,7 @@ chega — a transição observada prova o caminho inteiro: VM → CloudWatch →
 
 ---
 
-## 3. O que o reboot revelou
+## 3. Achados encontrados no caminho e o que foi feito com eles
 
 ### Um alerta real, não simulado
 
@@ -339,20 +339,85 @@ amostra de avaliação:
 | 3103 | `ee407fc4aab6` | cowrie | 2026-09-10T17:16:19Z | brute_force |
 | 3104 | `435e8004bb3a` | cowrie | 2026-09-10T17:16:42Z | brute_force |
 
-Filtro: `select * from attacks where src_ip = '<IP_ADMIN>'`. Note que as quatro
-foram classificadas como `brute_force` sendo apenas conexões TCP abertas e
-fechadas, sem tentativa de login — é um erro de classificação observável e
-serve de exemplo concreto para a discussão de limitações.
+**Resolvido em 10/09/2026** com `data_pipeline/exclusions.py`. O banco operacional
+**não é alterado** — as sessões continuam lá, com o log original. Quem monta
+amostra de avaliação aplica o filtro; quem estuda a coleta bruta não aplica, e a
+diferença entre as duas leituras é reproduzível por outra pessoa.
 
-### Achado colateral no backend
+O módulo combina duas listas:
 
-O log do `beeia-backend` no boot mostra `InconsistentVersionWarning` do
-scikit-learn: os modelos foram serializados com a versão 1.5.2 e estão sendo
-carregados com a 1.9.0, em `DecisionTreeClassifier`, `RandomForestClassifier` e
-`LabelEncoder`. A própria biblioteca avisa que isso pode produzir resultados
-inválidos. Não tem relação com a contenção, mas **afeta a validade das
-classificações do TCC** e precisa ser resolvido antes de medir desempenho:
-fixar a versão do scikit-learn ou retreinar os modelos na versão em uso.
+- os `session_id` acima, fixos no código com data e motivo (vão para o Git — são
+  identificadores opacos);
+- IPs em `data_pipeline/excluded_ips.local.txt`, que **não** vai para o Git
+  (contém o IP administrativo) e está no `.gitignore`. Sem o arquivo o módulo
+  continua funcionando, filtrando só por `session_id`.
+
+A lista por IP é a que sustenta o filtro a longo prazo: cada verificação nova de
+alcance gera sessão nova, e ela é capturada sem editar código. Execução em
+10/09/2026 às 17:33 UTC: 3.111 sessões no banco, **6 excluídas**, 3.105 elegíveis
+para avaliação.
+
+```bash
+python data_pipeline/exclusions.py --db data/beeia.db
+```
+
+Note que essas sessões foram classificadas como `brute_force` sendo apenas
+conexões TCP abertas e fechadas, sem tentativa de login — é um erro de
+classificação observável e serve de exemplo concreto na discussão de limitações.
+
+### Divergência de versão do scikit-learn — medida e corrigida
+
+O log do `beeia-backend` no boot mostrava `InconsistentVersionWarning`: os modelos
+foram serializados com scikit-learn **1.5.2** e estavam sendo carregados com a
+**1.9.0**. Causa raiz: todos os `requirements.txt` usavam intervalo
+(`scikit-learn>=1.3.0`), então a instalação foi parar numa versão bem à frente.
+
+**Antes de mudar qualquer coisa, o impacto foi medido**, porque a pergunta que
+importa para o TCC é se os dados já coletados valem. Os três modelos foram
+carregados nos dois ambientes — mesmo `numpy` 2.4.6 e `scipy` 1.17.1, variando só
+o scikit-learn — e alimentados com a mesma matriz de 5.000 amostras (seed 42):
+
+| Modelo | Probabilidades idênticas? |
+|---|---|
+| `cowrie_rf` | sim, hash idêntico |
+| `dionaea_rf` | sim, hash idêntico |
+| `dionaea_real_rf` | não — diferença máxima **2,22e-16** |
+
+Para o `dionaea_real_rf`, 32 células de 30.000 diferem em **1 ULP de float64** e
+**nenhum dos 5.000 rótulos muda**. Ou seja: o aviso era real, mas o efeito é
+ruído de ponto flutuante. **As classificações já gravadas continuam válidas.**
+
+Correção aplicada:
+
+1. Versões fixadas em `backend/requirements.txt` e nos dois
+   `ml/*/requirements.txt` — `scikit-learn==1.5.2`, mais `numpy`, `pandas` e
+   `joblib` nas versões verificadas. O intervalo `>=` era a causa raiz.
+2. `ml/cowrie/train.py` e `ml/dionaea/train.py` passam a gravar um bloco
+   `environment` no `*_meta.json` com Python, scikit-learn, numpy, pandas e
+   joblib. Os metadados antigos não registravam nada disso, e foi por isso que a
+   divergência só apareceu como warning em tempo de execução.
+3. A VM foi alinhada para `scikit-learn==1.5.2` e o backend reiniciado. O warning
+   sumiu e a sessão classificada logo depois saiu com confiança `0.6433`,
+   **o mesmo valor** das sessões classificadas minutos antes sob a 1.9.0.
+
+Estado do venv antes da mudança preservado em `/tmp/freeze_antes.txt` na VM.
+
+### O modelo Dionaea treinado com dados reais não está em uso
+
+`backend/dionaea_classifier.py` carrega `dionaea_rf.joblib` — o modelo de **dados
+sintéticos**, 4 classes, 10 features. O `dionaea_real_rf.joblib`, treinado com
+2.100 sessões reais (6 classes, 7 features, `cv_f1_macro` 0,8426), está no disco
+mas **nenhum código o referencia**.
+
+Consequência: toda classificação Dionaea gravada no banco veio do modelo
+sintético. Trocar não é uma linha de código — os dois modelos têm conjuntos de
+features diferentes, então `_extract` precisa ser ajustado para as 7 features do
+modelo real, e as classes mudam de 4 para 6.
+
+Não foi alterado aqui: muda o comportamento da classificação em produção e é
+decisão de vocês, não uma correção óbvia. Mas **precisa ser decidido antes** de
+medir desempenho, senão a avaliação mede o modelo sintético enquanto o texto do
+TCC fala do treino real.
 
 ---
 
@@ -381,8 +446,9 @@ sudo systemctl list-timers 'beeia-*'
 ## 5. O que fica em aberto
 
 1. **Confirmar as duas assinaturas de email.** Bloqueia a entrega de todos os alertas.
-2. **Corrigir a incompatibilidade de versão do scikit-learn** antes de medir
-   acurácia (seção 3). Afeta a validade dos resultados, não a segurança.
+2. **Decidir qual modelo Dionaea vale** (seção 3). Hoje roda o sintético; o
+   treinado com dados reais está no disco sem ser usado. Medir desempenho antes
+   de decidir isso mede o modelo errado.
 3. Porta 2222 já está restrita a `<IP_ADMIN>/32` no security group — a
    afirmação de `verificacao-vm-2026-09-10.md` de que estava em `0.0.0.0/0` está
    desatualizada. O dashboard em 64298 continua aberto para `0.0.0.0/0`, protegido

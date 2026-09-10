@@ -64,6 +64,40 @@ Já ativo por padrão, sem configuração:
 
 **A camada mais importante.** Em vez de expor a porta 8000 do backend (e o `npm run dev`/build do frontend) diretamente na internet, coloque tudo atrás do nginx do T-Pot, que já vem com Basic Auth pronto (mesmo mecanismo usado pelo Kibana/painel original do T-Pot).
 
+### Onde estão as credenciais em uso, e como recuperar o acesso
+
+São **duas coisas diferentes**, e o popup do navegador é só a primeira:
+
+| O que | Onde está | Dá para recuperar? |
+|---|---|---|
+| Usuário/senha do popup do navegador (Basic Auth) | `${TPOT_DATA_PATH}/nginx/conf/nginxpasswd` na VM, montado no container `nginx` como `/etc/nginx/nginxpasswd` | **Não.** A senha está em bcrypt. Só dá para redefinir. |
+| Chave de acesso do dashboard (`BEEIA_API_KEY`) | `BEEIA_API_KEY=` no `.env` do projeto na VM | Sim, é texto puro. |
+
+Ver o usuário configurado e a chave, na VM:
+
+```bash
+# usuarios do Basic Auth (so os nomes; a senha e um hash bcrypt)
+sudo docker exec nginx cut -d: -f1 /etc/nginx/nginxpasswd
+
+# chave de acesso do dashboard
+sudo grep '^BEEIA_API_KEY=' ~/beeia/.env
+```
+
+**Redefinir a senha do popup** (não precisa recuperar a antiga):
+
+```bash
+# 1. gere a nova linha de credencial
+htpasswd -n -b "seu_usuario" "sua_nova_senha" | base64 -w0
+# 2. cole o resultado em WEB_USER= no .env da VM
+# 3. recrie o container do nginx para regravar o nginxpasswd
+docker compose up -d --force-recreate nginx
+```
+
+> A chave da API **não** substitui o Basic Auth: ela vai embutida no bundle do
+> frontend, então qualquer pessoa que consiga abrir a página consegue extraí-la.
+> Se trocar a `BEEIA_API_KEY`, atualize também `VITE_API_KEY` no `frontend/.env` e
+> rode `npm run build`, senão o dashboard passa a receber 401 do próprio backend.
+
 ### Passo a passo
 
 1. **Gere as credenciais WEB_USER** (se ainda não fez isso — mesmo passo do `md-usotcc/rodar-cowrie.md`):

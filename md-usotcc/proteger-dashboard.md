@@ -64,39 +64,57 @@ Já ativo por padrão, sem configuração:
 
 **A camada mais importante.** Em vez de expor a porta 8000 do backend (e o `npm run dev`/build do frontend) diretamente na internet, coloque tudo atrás do nginx do T-Pot, que já vem com Basic Auth pronto (mesmo mecanismo usado pelo Kibana/painel original do T-Pot).
 
-### Onde estão as credenciais em uso, e como recuperar o acesso
+### Como o acesso funciona hoje (mudou em 10/09/2026)
 
-São **duas coisas diferentes**, e o popup do navegador é só a primeira:
+O popup do navegador **não existe mais**. O Basic Auth do nginx foi removido a
+pedido e substituído por uma tela de login no próprio painel.
 
-| O que | Onde está | Dá para recuperar? |
-|---|---|---|
-| Usuário/senha do popup do navegador (Basic Auth) | `${TPOT_DATA_PATH}/nginx/conf/nginxpasswd` na VM, montado no container `nginx` como `/etc/nginx/nginxpasswd` | **Não.** A senha está em bcrypt. Só dá para redefinir. |
-| Chave de acesso do dashboard (`BEEIA_API_KEY`) | `BEEIA_API_KEY=` no `.env` do projeto na VM | Sim, é texto puro. |
+Fluxo atual:
 
-Ver o usuário configurado e a chave, na VM:
+1. A página do dashboard carrega sem pedir nada.
+2. A tela de login manda `POST /api/login` com usuário e senha.
+3. O backend confere a senha contra um hash **PBKDF2-SHA256, 600 mil iterações**,
+   e só então devolve a `BEEIA_API_KEY`.
+4. O navegador guarda a chave em `sessionStorage` e usa em `/api/*` e `/ws`.
+
+A senha em texto não existe em lugar nenhum: nem no `.env`, nem no bundle do
+frontend, nem no banco. O `.env` guarda só o hash.
+
+| Variável | Para quê |
+|---|---|
+| `BEEIA_LOGIN_USER` | nome de usuário do login |
+| `BEEIA_LOGIN_PASSWORD_HASH` | saída de `auth.hash_password()` |
+| `BEEIA_API_KEY` | a chave que o login devolve; continua protegendo `/api/*` |
+| `BEEIA_TRUSTED_PROXIES` | de quem aceitar `X-Forwarded-For` (padrão: redes privadas) |
+
+**Trocar a senha** — não exige rebuild do frontend, só reiniciar o backend:
 
 ```bash
-# usuarios do Basic Auth (so os nomes; a senha e um hash bcrypt)
-sudo docker exec nginx cut -d: -f1 /etc/nginx/nginxpasswd
-
-# chave de acesso do dashboard
-sudo grep '^BEEIA_API_KEY=' ~/beeia/.env
+cd ~/beeia/backend
+./venv/bin/python -c 'import auth; print(auth.hash_password("nova-senha-aqui"))'
+# cole em BEEIA_LOGIN_PASSWORD_HASH= no ~/beeia/.env
+sudo systemctl restart beeia-backend
 ```
 
-**Redefinir a senha do popup** (não precisa recuperar a antiga):
+> O separador do hash é `:` e não `$` de propósito: o `.env` é lido pelo
+> docker-compose e pelo systemd, e os dois interpolam `$` — um hash com cifrão
+> chegaria corrompido e ninguém conseguiria entrar.
 
-```bash
-# 1. gere a nova linha de credencial
-htpasswd -n -b "seu_usuario" "sua_nova_senha" | base64 -w0
-# 2. cole o resultado em WEB_USER= no .env da VM
-# 3. recrie o container do nginx para regravar o nginxpasswd
-docker compose up -d --force-recreate nginx
-```
+**O que protege contra força bruta:** o custo do PBKDF2 (~0,4 s por tentativa) e
+um limite de **5 tentativas a cada 5 minutos por IP de origem**. O IP é lido do
+`X-Forwarded-For` só quando a requisição vem do proxy confiável — vindo de
+qualquer outra origem o header é ignorado, senão bastaria forjá-lo para escapar
+do limite.
 
-> A chave da API **não** substitui o Basic Auth: ela vai embutida no bundle do
-> frontend, então qualquer pessoa que consiga abrir a página consegue extraí-la.
-> Se trocar a `BEEIA_API_KEY`, atualize também `VITE_API_KEY` no `frontend/.env` e
-> rode `npm run build`, senão o dashboard passa a receber 401 do próprio backend.
+> **O que se perdeu ao tirar o popup.** Antes, quem não tivesse a credencial não
+> conseguia nem baixar a página. Agora a página e os arquivos estáticos são
+> públicos e a senha do login é a única barreira — numa máquina que existe
+> justamente para atrair scanners. Uma senha fraca aqui é a diferença entre um
+> painel protegido e um painel aberto. Para voltar atrás, as linhas de
+> `auth_basic` estão comentadas em `docker/nginx/dist/conf/beeia.conf`.
+
+**Recuperar acesso**, se ninguém lembrar da senha: gere um hash novo pelo comando
+acima e reinicie o backend. Não há como recuperar a senha antiga — só substituir.
 
 ### Passo a passo
 

@@ -484,11 +484,26 @@ sudo systemctl list-timers 'beeia-*'
 ## 5. O que fica em aberto
 
 1. **Confirmar as duas assinaturas de email.** Bloqueia a entrega de todos os alertas.
-2. **Reconciliar o repositório com a VM por inteiro.** O pipeline Dionaea foi
-   trazido, mas o checkout local continua no commit `a29eb1e4` e a VM em
-   `b7ac139e`: pode haver outras diferenças ainda não levantadas. Enquanto isso
-   durar, ler só o repositório leva a conclusões erradas — foi o que aconteceu na
-   seção 3. Comparar os dois lados antes de qualquer afirmação sobre o sistema.
+2. **Reconciliar o repositório com a VM.** Esta divergência já causou dois
+   incidentes: uma afirmação errada sobre o modelo Dionaea (seção 3) e a
+   sobrescrita do `beeia.conf` de produção, que derrubou o certificado TLS válido
+   por alguns minutos em 10/09/2026.
+
+   Levantamento feito em 10/09/2026, normalizando quebras de linha. **A
+   divergência é mútua** — cada lado tem conteúdo que o outro não tem, então isto
+   é um merge a ser decidido por vocês, não uma cópia de mão única:
+
+   | Arquivo | Situação |
+   |---|---|
+   | `README.md`, `frontend/README.md` | repositório maior |
+   | `PROJECT_CONTEXT.md`, `Docs/Process/README.md`, `Docs/Process/11-cronograma-e-status.md` | VM maior |
+   | `data_pipeline/build_dataset.py`, `data_pipeline/generate_logs.py` | VM maior |
+   | `Docs/Process/13-deploy-publicacao-aws.md`, `md-usotcc/publicar-aws.md` | só na VM |
+   | `frontend/src/*`, `ml/*/train.py`, `md-usotcc/*` | repositório à frente (mudanças desta sessão) |
+
+   Antes de afirmar qualquer coisa sobre como o sistema se comporta, comparar o
+   arquivo na VM com o do repositório. E **antes de sobrescrever um arquivo na
+   VM, diferenciar primeiro** — foi a lição dos dois incidentes.
 3. Porta 2222 já está restrita a `<IP_ADMIN>/32` no security group — a
    afirmação de `verificacao-vm-2026-09-10.md` de que estava em `0.0.0.0/0` está
    desatualizada. O dashboard em 64298 continua aberto para `0.0.0.0/0`, protegido

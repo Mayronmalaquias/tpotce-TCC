@@ -2,23 +2,28 @@ import { useState } from 'react'
 import { ShieldOff, ShieldCheck, Search } from 'lucide-react'
 
 const TYPE_STYLES = {
-  brute_force:       'bg-red-900/50 text-red-300 border-red-700',
-  command_injection: 'bg-orange-900/50 text-orange-300 border-orange-700',
-  malware_download:  'bg-purple-900/50 text-purple-300 border-purple-700',
-  recon:             'bg-blue-900/50 text-blue-300 border-blue-700',
-  port_scan:         'bg-teal-900/50 text-teal-300 border-teal-700',
-  service_probe:     'bg-yellow-900/50 text-yellow-300 border-yellow-700',
-  exploit_attempt:   'bg-pink-900/50 text-pink-300 border-pink-700',
+  brute_force:           'bg-red-900/50 text-red-300 border-red-700',
+  command_injection:     'bg-orange-900/50 text-orange-300 border-orange-700',
+  malware_download:      'bg-purple-900/50 text-purple-300 border-purple-700',
+  recon:                 'bg-blue-900/50 text-blue-300 border-blue-700',
+  port_scan:             'bg-teal-900/50 text-teal-300 border-teal-700',
+  service_probe:         'bg-yellow-900/50 text-yellow-300 border-yellow-700',
+  exploit_attempt:       'bg-pink-900/50 text-pink-300 border-pink-700',
+  // Classes do modelo Dionaea treinado com captura real.
+  connection_flood:      'bg-indigo-900/50 text-indigo-300 border-indigo-700',
+  credential_bruteforce: 'bg-emerald-900/50 text-emerald-300 border-emerald-700',
 }
 
 const TYPE_LABELS = {
-  brute_force:       'Brute Force',
-  command_injection: 'Cmd Injection',
-  malware_download:  'Malware DL',
-  recon:             'Recon',
-  port_scan:         'Port Scan',
-  service_probe:     'Probe',
-  exploit_attempt:   'Exploit',
+  brute_force:           'Brute Force',
+  command_injection:     'Cmd Injection',
+  malware_download:      'Malware DL',
+  recon:                 'Recon',
+  port_scan:             'Port Scan',
+  service_probe:         'Probe',
+  exploit_attempt:       'Exploit',
+  connection_flood:      'Flood',
+  credential_bruteforce: 'Cred. Brute',
 }
 
 const HONEYPOT_STYLES = {

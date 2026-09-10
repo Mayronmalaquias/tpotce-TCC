@@ -4,33 +4,51 @@ import {
 } from 'recharts'
 
 const COLORS = {
-  brute_force:       '#ef4444',
-  command_injection: '#f97316',
-  malware_download:  '#a855f7',
-  recon:             '#3b82f6',
-  port_scan:         '#14b8a6',
-  service_probe:     '#eab308',
-  exploit_attempt:   '#ec4899',
+  brute_force:           '#ef4444',
+  command_injection:     '#f97316',
+  malware_download:      '#a855f7',
+  recon:                 '#3b82f6',
+  port_scan:             '#14b8a6',
+  service_probe:         '#eab308',
+  exploit_attempt:       '#ec4899',
+  // Classes do modelo Dionaea treinado com captura real.
+  connection_flood:      '#6366f1',
+  credential_bruteforce: '#10b981',
 }
 
 const LABELS = {
-  brute_force:       'Brute Force',
-  command_injection: 'Cmd Injection',
-  malware_download:  'Malware DL',
-  recon:             'Recon',
-  port_scan:         'Port Scan',
-  service_probe:     'Probe',
-  exploit_attempt:   'Exploit',
+  brute_force:           'Brute Force',
+  command_injection:     'Cmd Injection',
+  malware_download:      'Malware DL',
+  recon:                 'Recon',
+  port_scan:             'Port Scan',
+  service_probe:         'Probe',
+  exploit_attempt:       'Exploit',
+  connection_flood:      'Flood',
+  credential_bruteforce: 'Cred. Brute',
 }
 
-const ATTACK_TYPES = Object.keys(COLORS)
-const LAST_TYPE = ATTACK_TYPES[ATTACK_TYPES.length - 1]
+const KNOWN_TYPES = Object.keys(COLORS)
+const FALLBACK_COLOR = '#94a3b8'
+
+const colorOf = t => COLORS[t] ?? FALLBACK_COLOR
+const labelOf = t => LABELS[t] ?? t
+
+// Uma classe que o modelo passe a prever mas que ninguem lembrou de cadastrar
+// aqui nao pode sumir do grafico em silencio: o conjunto de tipos e a uniao
+// entre os conhecidos e os que realmente aparecem nos dados.
+function typesToPlot(chartData, typeCounts) {
+  const found = new Set(KNOWN_TYPES)
+  chartData.forEach(({ attack_type }) => { if (attack_type) found.add(attack_type) })
+  Object.keys(typeCounts).forEach(t => found.add(t))
+  return [...found]
+}
 
 // Converte dados do backend [{hour, attack_type, count}] para
 // [{hour, brute_force: N, command_injection: N, ...}]
-function buildBarData(raw) {
+function buildBarData(raw, types) {
   const map = {}
-  const emptyRow = () => Object.fromEntries(ATTACK_TYPES.map(t => [t, 0]))
+  const emptyRow = () => Object.fromEntries(types.map(t => [t, 0]))
   raw.forEach(({ hour, attack_type, count }) => {
     const label = hour ? hour.slice(11, 16) : '??'
     if (!map[label]) map[label] = { hour: label, ...emptyRow() }
@@ -39,10 +57,10 @@ function buildBarData(raw) {
   return Object.values(map).slice(-12) // últimas 12 horas
 }
 
-function buildPieData(typeCounts) {
-  return ATTACK_TYPES
+function buildPieData(typeCounts, types) {
+  return types
     .filter(t => typeCounts[t] > 0)
-    .map(t => ({ name: LABELS[t], value: typeCounts[t], color: COLORS[t] }))
+    .map(t => ({ name: labelOf(t), value: typeCounts[t], color: colorOf(t) }))
 }
 
 const tooltipStyle = {
@@ -53,8 +71,10 @@ const tooltipStyle = {
 }
 
 export default function Charts({ chartData, typeCounts = {} }) {
-  const barData  = buildBarData(chartData ?? [])
-  const pieData  = buildPieData(typeCounts)
+  const types    = typesToPlot(chartData ?? [], typeCounts)
+  const lastType = types[types.length - 1]
+  const barData  = buildBarData(chartData ?? [], types)
+  const pieData  = buildPieData(typeCounts, types)
   const hasData  = pieData.length > 0
 
   return (
@@ -69,10 +89,10 @@ export default function Charts({ chartData, typeCounts = {} }) {
             <YAxis tick={{ fill: '#94a3b8', fontSize: 11 }} allowDecimals={false} />
             <Tooltip contentStyle={tooltipStyle} />
             <Legend
-              formatter={v => <span style={{ color: '#94a3b8', fontSize: 11 }}>{LABELS[v] ?? v}</span>}
+              formatter={v => <span style={{ color: '#94a3b8', fontSize: 11 }}>{labelOf(v)}</span>}
             />
-            {ATTACK_TYPES.map(t => (
-              <Bar key={t} dataKey={t} stackId="a" fill={COLORS[t]} radius={t === LAST_TYPE ? [3, 3, 0, 0] : [0, 0, 0, 0]} />
+            {types.map(t => (
+              <Bar key={t} dataKey={t} stackId="a" fill={colorOf(t)} radius={t === lastType ? [3, 3, 0, 0] : [0, 0, 0, 0]} />
             ))}
           </BarChart>
         </ResponsiveContainer> : <div className="chart-empty">Sem ataques nas últimas 12 horas</div>}

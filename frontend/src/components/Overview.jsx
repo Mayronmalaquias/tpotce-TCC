@@ -1,25 +1,30 @@
 import { Shield, Globe, AlertTriangle, Ban } from 'lucide-react'
 
 const ATTACK_LABELS = {
-  brute_force:       'Brute Force',
-  command_injection: 'Cmd Injection',
-  malware_download:  'Malware Download',
-  recon:             'Reconhecimento',
-  port_scan:         'Port Scan',
-  service_probe:     'Probe de Serviço',
-  exploit_attempt:   'Tentativa de Exploit',
-  none:              '—',
+  brute_force:           'Brute Force',
+  command_injection:     'Cmd Injection',
+  malware_download:      'Malware Download',
+  recon:                 'Reconhecimento',
+  port_scan:             'Port Scan',
+  service_probe:         'Probe de Serviço',
+  exploit_attempt:       'Tentativa de Exploit',
+  // Classes do modelo Dionaea treinado com captura real.
+  connection_flood:      'Flood de Conexões',
+  credential_bruteforce: 'Brute Force de Credenciais',
+  none:                  '—',
 }
 
 const ATTACK_COLORS = {
-  brute_force:       'text-red-400',
-  command_injection: 'text-orange-400',
-  malware_download:  'text-purple-400',
-  recon:             'text-blue-400',
-  port_scan:         'text-teal-400',
-  service_probe:     'text-yellow-400',
-  exploit_attempt:   'text-pink-400',
-  none:              'text-slate-400',
+  brute_force:           'text-red-400',
+  command_injection:     'text-orange-400',
+  malware_download:      'text-purple-400',
+  recon:                 'text-blue-400',
+  port_scan:             'text-teal-400',
+  service_probe:         'text-yellow-400',
+  exploit_attempt:       'text-pink-400',
+  connection_flood:      'text-indigo-400',
+  credential_bruteforce: 'text-emerald-400',
+  none:                  'text-slate-400',
 }
 
 function Card({ icon: Icon, label, value, sub, color = 'text-cyan-400' }) {

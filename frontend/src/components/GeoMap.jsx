@@ -1,23 +1,28 @@
 import { MapContainer, TileLayer, CircleMarker, Popup } from 'react-leaflet'
 
 const COLORS = {
-  brute_force:       '#ef4444',
-  command_injection: '#f97316',
-  malware_download:  '#a855f7',
-  recon:             '#3b82f6',
-  port_scan:         '#14b8a6',
-  service_probe:     '#eab308',
-  exploit_attempt:   '#ec4899',
+  brute_force:           '#ef4444',
+  command_injection:     '#f97316',
+  malware_download:      '#a855f7',
+  recon:                 '#3b82f6',
+  port_scan:             '#14b8a6',
+  service_probe:         '#eab308',
+  exploit_attempt:       '#ec4899',
+  // Classes do modelo Dionaea treinado com captura real.
+  connection_flood:      '#6366f1',
+  credential_bruteforce: '#10b981',
 }
 
 const LABELS = {
-  brute_force:       'Brute Force',
-  command_injection: 'Cmd Injection',
-  malware_download:  'Malware Download',
-  recon:             'Reconhecimento',
-  port_scan:         'Port Scan',
-  service_probe:     'Probe de Serviço',
-  exploit_attempt:   'Tentativa de Exploit',
+  brute_force:           'Brute Force',
+  command_injection:     'Cmd Injection',
+  malware_download:      'Malware Download',
+  recon:                 'Reconhecimento',
+  port_scan:             'Port Scan',
+  service_probe:         'Probe de Serviço',
+  exploit_attempt:       'Tentativa de Exploit',
+  connection_flood:      'Flood de Conexões',
+  credential_bruteforce: 'Brute Force de Credenciais',
 }
 
 const HONEYPOT_LABELS = { cowrie: 'Cowrie', dionaea: 'Dionaea' }

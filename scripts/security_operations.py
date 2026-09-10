@@ -100,8 +100,10 @@ def build_archive(project, integrity, target):
                 if snapshot.execute('PRAGMA quick_check').fetchone()[0] != 'ok':
                     raise ValueError('Database consistency check failed')
                 rows = snapshot.execute('SELECT count(*) FROM attacks').fetchone()[0]
-        for folder in ['backend', 'frontend/src', 'scripts', 'ml/cowrie/models', 'ml/dionaea/models',
-                       'data/cowrie/log', 'data/dionaea/log']:
+        for folder in ['backend', 'frontend/src', 'scripts', 'data_pipeline',
+                       'ml/cowrie/models', 'ml/dionaea/models',
+                       'data/cowrie/log', 'data/dionaea/log',
+                       'data/avaliacao', 'data/captura_real']:
             copy_tree(project / folder, staging / 'project' / folder)
         for name in ['docker-compose.yml', 'frontend/package.json', 'frontend/package-lock.json',
                      'frontend/index.html', 'frontend/tailwind.config.js',

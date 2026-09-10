@@ -19,6 +19,13 @@ install_tpot.log
 
 # segredos (API keys, credenciais)
 .env
+.env.*
+!.env.example
+
+# dependencias frontend
+node_modules/
+frontend/node_modules/
+frontend/dist/
 
 # Evidencia da captura real do Dionaea: os CSVs derivados sao pequenos e
 # sustentam os resultados do TCC, entao sao versionados. A captura bruta
@@ -26,6 +33,12 @@ install_tpot.log
 !data/captura_real/
 data/captura_real/*
 !data/captura_real/*.csv
+
+# Amostra de avaliacao cega e gabarito (fundamentais para reprodutibilidade)
+!data/avaliacao/
+data/avaliacao/*
+!data/avaliacao/*.csv
+!data/avaliacao/*.json
 
 # Log transitorio das rodadas do harness experimental
 ml/experiments/run.log

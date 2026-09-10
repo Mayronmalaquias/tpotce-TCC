@@ -296,4 +296,6 @@ Ao gerar ou alterar código neste repositório, siga:
 | Guia: publicar numa instância AWS EC2 | [md-usotcc/publicar-aws.md](md-usotcc/publicar-aws.md) |
 | Guia: segurança do host | [md-usotcc/seguranca-host.md](md-usotcc/seguranca-host.md) |
 | Guia: contenção de saída e alertas | [md-usotcc/contencao-e-alertas.md](md-usotcc/contencao-e-alertas.md) |
+| Coleta e avaliação dos classificadores | [md-usotcc/coleta-e-avaliacao.md](md-usotcc/coleta-e-avaliacao.md) |
+| Dossiê de entrega ao orientador | [md-usotcc/entrega-professor-pablo.md](md-usotcc/entrega-professor-pablo.md) |
 | Artigo completo (TCC1) | [Docs/TCC_SENDLER/Artigo_TCC1_ENGC_ENGT_CCO.pdf](Docs/TCC_SENDLER/Artigo_TCC1_ENGC_ENGT_CCO.pdf) |

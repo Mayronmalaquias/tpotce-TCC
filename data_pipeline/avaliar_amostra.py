@@ -90,6 +90,37 @@ def consolida_rotulos(revisao: list[dict]) -> dict:
     }
 
 
+def _conjunto(valor) -> set:
+    return {c for c in _limpo(valor).split(";") if c}
+
+
+def multicomportamento(revisao: list[dict], previsoes: dict) -> dict | None:
+    """Sessoes reais juntam varios comportamentos; o modelo devolve um so.
+
+    Por sessao, os comportamentos considerados sao os que os DOIS revisores
+    marcaram (ou os de quem marcou, se so um marcou). Mede quantas sessoes tem
+    mais de um, e se a previsao do modelo esta entre eles.
+    """
+    if not revisao or "comportamentos_revisor1" not in revisao[0]:
+        return None
+    n = multiplos = acertos = 0
+    for linha in revisao:
+        c1 = _conjunto(linha.get("comportamentos_revisor1"))
+        c2 = _conjunto(linha.get("comportamentos_revisor2"))
+        observados = (c1 & c2) if (c1 and c2) else (c1 or c2)
+        previsao = previsoes.get(_limpo(linha.get("session_id")))
+        if not observados or not previsao:
+            continue
+        n += 1
+        multiplos += len(observados) > 1
+        acertos += _limpo(previsao.get("previsto")) in observados
+    if not n:
+        return None
+    return {"sessoes": n, "com_mais_de_um": multiplos,
+            "previsao_entre_os_observados": acertos,
+            "taxa_previsao_entre_os_observados": round(acertos / n, 4)}
+
+
 def metricas(pares: list[tuple[str, str]]) -> dict:
     classes = sorted({c for par in pares for c in par})
     matriz = {real: {previsto: 0 for previsto in classes} for real in classes}
@@ -221,6 +252,14 @@ def main() -> int:
         print(f"    {classe:<24} P={v['precisao']:.3f}  R={v['recall']:.3f}  "
               f"F1={v['f1']:.3f}  n={v['suporte']}{aviso}")
 
+    multi = multicomportamento(revisao, previsoes)
+    if multi:
+        print("\n  Multicomportamento (todas as classes observadas, nao so a principal)")
+        print(f"    sessoes com comportamentos marcados : {multi['sessoes']}")
+        print(f"    com mais de um comportamento        : {multi['com_mais_de_um']}")
+        print(f"    previsao entre os observados        : {multi['previsao_entre_os_observados']}"
+              f" ({multi['taxa_previsao_entre_os_observados']:.2%})")
+
     if consolidado["discordancias"]:
         print("\n  Sessoes em que os revisores discordaram (revisar juntos)")
         for d in consolidado["discordancias"][:10]:
@@ -232,7 +271,7 @@ def main() -> int:
 
     if args.json:
         saida = {"gerado_em": dt.datetime.now(dt.timezone.utc).isoformat(),
-                 "honeypot": args.honeypot, "fora_da_taxonomia": {
+                 "honeypot": args.honeypot, "multicomportamento": multi, "fora_da_taxonomia": {
                      "tratamento": args.fora_da_taxonomia, "sessoes": fora},
                  "concordancia_entre_revisores": concordancia,
                  "inconclusivas": consolidado["inconclusivas"],

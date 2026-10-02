@@ -2,10 +2,12 @@
 """Preenche `revisao_cega.csv` com os rotulos gravados pela pagina de revisao.
 
 A pagina guarda um documento por revisor:
-    {"revisor": "1" | "2", "rotulos": {session_id: {"rotulo": ..., "observacao": ...}}}
+    {"revisor": "1" | "2", "rotulos": {session_id: {"rotulo": ..., "comportamentos": [...],
+                                                    "observacao": ...}}}
 
-Este script recebe esses documentos (um JSON com a lista deles) e escreve
-`rotulo_revisor1`, `rotulo_revisor2`, `inconclusivo` e `observacao`.
+Este script recebe esses documentos e escreve `rotulo_revisor1`, `rotulo_revisor2`,
+`comportamentos_revisor1`, `comportamentos_revisor2` (classes separadas por `;`),
+`inconclusivo` e `observacao`. As colunas de comportamento sao criadas se faltarem.
 
 Recusa em vez de adivinhar:
   * dois documentos dizendo ser o mesmo revisor;
@@ -30,6 +32,7 @@ CLASSES = {
                 "port_scan", "exploit_attempt", "malware_download"},
 }
 ESPECIAIS = {"inconclusivo", "fora_da_taxonomia"}
+COLUNAS_NOVAS = ["comportamentos_revisor1", "comportamentos_revisor2"]
 
 
 class ErroImportacao(ValueError):
@@ -61,6 +64,11 @@ def importa(linhas: list[dict], documentos: list[dict], substituir: bool = False
                 raise ErroImportacao(f"{sid}: {coluna} ja tem {atual!r}; use --substituir")
             linha[coluna] = rotulo
             resumo[revisor] += 1
+            comportamentos = (entrada or {}).get("comportamentos") or []
+            invalidos = set(comportamentos) - CLASSES[linha["honeypot"]]
+            if invalidos:
+                raise ErroImportacao(f"{sid}: comportamento {sorted(invalidos)} nao existe para {linha['honeypot']}")
+            linha["comportamentos_revisor" + revisor] = ";".join(comportamentos)
             obs = str((entrada or {}).get("observacao", "")).strip().replace("\n", " ")
             if obs:
                 partes = [p for p in (linha.get("observacao") or "").split(" | ")
@@ -84,7 +92,8 @@ def main() -> int:
     args = ap.parse_args()
     with args.revisao.open(newline="", encoding="utf-8") as fluxo:
         leitor = csv.DictReader(fluxo)
-        campos, linhas = leitor.fieldnames, list(leitor)
+        campos, linhas = list(leitor.fieldnames), list(leitor)
+    campos += [c for c in COLUNAS_NOVAS if c not in campos]
     if args.dir_rotulos:
         documentos = [json.loads(p.read_text(encoding="utf-8"))
                       for p in sorted(args.dir_rotulos.glob("*.json"))]

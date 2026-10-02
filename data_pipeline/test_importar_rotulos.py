@@ -77,6 +77,36 @@ class TesteImportacao(unittest.TestCase):
         self.assertEqual(linhas[0]["observacao"], "R1: uname")
 
 
+class TesteComportamentos(unittest.TestCase):
+    def test_importa_comportamentos_por_revisor(self):
+        linhas = planilha()
+        importacao.importa(linhas, [
+            doc("1", c1={"rotulo": "malware_download", "comportamentos": ["malware_download", "recon"]}),
+            doc("2", c1={"rotulo": "malware_download"})])
+        self.assertEqual(linhas[0]["comportamentos_revisor1"], "malware_download;recon")
+        self.assertEqual(linhas[0]["comportamentos_revisor2"], "")
+
+    def test_recusa_comportamento_de_outro_honeypot(self):
+        with self.assertRaises(importacao.ErroImportacao):
+            importacao.importa(planilha(), [doc("1", d1={"rotulo": "service_probe",
+                                                         "comportamentos": ["recon"]})])
+
+    def test_multicomportamento_usa_intersecao_e_mede_previsao_entre_observados(self):
+        import avaliar_amostra as apuracao
+        revisao = [
+            {"session_id": "s1", "comportamentos_revisor1": "malware_download;recon",
+             "comportamentos_revisor2": "malware_download;recon;command_injection"},
+            {"session_id": "s2", "comportamentos_revisor1": "brute_force", "comportamentos_revisor2": ""},
+            {"session_id": "s3", "comportamentos_revisor1": "", "comportamentos_revisor2": ""},
+        ]
+        previsoes = {"s1": {"previsto": "recon"}, "s2": {"previsto": "recon"}, "s3": {"previsto": "recon"}}
+        r = apuracao.multicomportamento(revisao, previsoes)
+        self.assertEqual(r["sessoes"], 2)
+        self.assertEqual(r["com_mais_de_um"], 1)
+        self.assertEqual(r["previsao_entre_os_observados"], 1)
+        self.assertIsNone(apuracao.multicomportamento([{"session_id": "s1"}], previsoes))
+
+
 class TesteApuracaoPorHoneypot(unittest.TestCase):
     def roda(self, *extra):
         with tempfile.TemporaryDirectory() as d:

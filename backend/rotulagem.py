@@ -8,7 +8,13 @@ concordancia com o modelo, nao acerto.
 
 Cada revisor tem um arquivo proprio, `rotulos/<revisor>.json`, no formato que
 `data_pipeline/importar_rotulos.py --dir-rotulos` le:
-    {"revisor": "1", "nome": "mayron", "rotulos": {session_id: {"rotulo", "observacao", "em"}}}
+    {"revisor": "1", "nome": "mayron",
+     "rotulos": {session_id: {"rotulo", "comportamentos", "observacao", "em"}}}
+
+`rotulo` e a classe PRINCIPAL (uma so, pela precedencia em PRECEDENCIA), que e
+o que se compara com a previsao do modelo. `comportamentos` lista TODAS as
+classes observadas na sessao: sessoes reais juntam varias (entra, enumera,
+baixa e executa), e o modelo so devolve uma.
 
 Os rotulos de um revisor nunca sao devolvidos ao outro; o progresso agregado
 so traz contagens.
@@ -36,6 +42,12 @@ CLASSES = {
                 "port_scan", "exploit_attempt", "malware_download"},
 }
 ESPECIAIS = {"inconclusivo", "fora_da_taxonomia"}
+# Quando a sessao mostra varios comportamentos, a classe principal e o mais grave.
+PRECEDENCIA = {
+    "cowrie": ["malware_download", "command_injection", "recon", "brute_force"],
+    "dionaea": ["malware_download", "exploit_attempt", "credential_bruteforce",
+                "port_scan", "connection_flood", "service_probe"],
+}
 
 COLUNAS_CEGAS = ("honeypot", "timestamp", "src_ip", "country", "protocol")
 FEATURES = ("login_attempts", "login_success", "command_count", "session_duration_s",
@@ -122,9 +134,10 @@ def rotulos_de(nome: str) -> dict:
         return _le(nome)
 
 
-def marca(nome: str, session_id: str, rotulo: str | None, observacao: str | None) -> dict:
-    """Grava rotulo e/ou observacao de uma sessao. `None` mantem o valor atual;
-    rotulo vazio limpa."""
+def marca(nome: str, session_id: str, rotulo: str | None, observacao: str | None,
+          comportamentos: list[str] | None = None) -> dict:
+    """Grava rotulo, comportamentos e/ou observacao de uma sessao. `None` mantem
+    o valor atual; rotulo vazio ou lista vazia limpa."""
     nome = revisor_valido(nome)
     _, honeypots = _amostra()
     honeypot = honeypots.get(session_id)
@@ -134,6 +147,11 @@ def marca(nome: str, session_id: str, rotulo: str | None, observacao: str | None
         rotulo = rotulo.strip()
         if rotulo and rotulo not in CLASSES[honeypot] | ESPECIAIS:
             raise RotuloInvalido(f"'{rotulo}' nao e classe do {honeypot}.")
+    if comportamentos is not None:
+        invalidos = set(comportamentos) - CLASSES[honeypot]
+        if invalidos:
+            raise RotuloInvalido(f"Comportamento fora da taxonomia do {honeypot}: {sorted(invalidos)}")
+        comportamentos = [c for c in PRECEDENCIA[honeypot] if c in set(comportamentos)]
     if observacao is not None and len(observacao) > MAX_OBSERVACAO:
         raise RotuloInvalido("Observacao longa demais.")
     with _trava:
@@ -141,6 +159,8 @@ def marca(nome: str, session_id: str, rotulo: str | None, observacao: str | None
         entrada = dict(dados["rotulos"].get(session_id, {}))
         if rotulo is not None:
             entrada["rotulo"] = rotulo
+        if comportamentos is not None:
+            entrada["comportamentos"] = comportamentos
         if observacao is not None:
             entrada["observacao"] = observacao
         entrada["em"] = dt.datetime.now(dt.timezone.utc).isoformat()

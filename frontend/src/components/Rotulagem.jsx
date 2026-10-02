@@ -31,6 +31,11 @@ const ESPECIAIS = [
   ['fora_da_taxonomia', 'Nenhuma classe se aplica', 'O comportamento está claro, mas nenhuma classe acima o descreve.', '0'],
   ['inconclusivo', 'Inconclusivo', 'A evidência não basta para decidir. A sessão sai do cálculo.', 'i'],
 ]
+// Sessao com varios comportamentos: a classe principal e o mais grave (mesma ordem do backend).
+const PRECEDENCIA = {
+  cowrie: ['malware_download', 'command_injection', 'recon', 'brute_force'],
+  dionaea: ['malware_download', 'exploit_attempt', 'credential_bruteforce', 'port_scan', 'connection_flood', 'service_probe'],
+}
 const NOME_ESPECIAL = { fora_da_taxonomia: 'nenhuma classe', inconclusivo: 'inconclusivo' }
 
 const FEATS = {
@@ -133,6 +138,7 @@ function EscolhaRevisor({ onEscolher, progresso }) {
         <li><strong>Enquanto não terminar, não abra Ataques, Mapa nem o detalhe de IP.</strong> Essas telas mostram a classe que o modelo previu.</li>
         <li>Não comentem sessões entre vocês antes de os dois terminarem. Combinar critérios gerais antes de começar pode e é recomendado.</li>
         <li>Decida pelos eventos. Se as contagens do topo divergirem deles, vale o evento; anote na observação.</li>
+        <li><strong>Vários comportamentos na mesma sessão</strong> (ex.: entra, roda <code>uname</code>, baixa e executa um binário): marque <strong>todos</strong> nas caixas de comportamento e escolha como <strong>classe principal o mais grave</strong>. Cowrie: malware_download › command_injection › recon › brute_force.</li>
         <li><strong>Nenhuma classe se aplica</strong>: o comportamento está claro, mas o modelo não tem classe para ele (ex.: conexão aberta e fechada sem login). <strong>Inconclusivo</strong>: não dá para decidir. Não force rótulo.</li>
       </ul>
     </section>
@@ -197,11 +203,27 @@ export default function Rotulagem() {
     }
   }, [revisor])
 
+  const ordenados = (hp, lista) => PRECEDENCIA[hp].filter(c => lista.includes(c))
+
+  // Escolher uma classe principal tambem a marca como comportamento observado.
   const marca = useCallback((id, rotulo) => {
     const novo = rotuloDe(id) === rotulo ? '' : rotulo
-    setRotulos(r => ({ ...r, [id]: { ...(r[id] || {}), rotulo: novo } }))
-    grava(id, { rotulo: novo })
-  }, [rotuloDe, grava])
+    const hp = porId[id].honeypot
+    const atuais = rotulos[id]?.comportamentos || []
+    const corpo = { rotulo: novo }
+    if (novo && PRECEDENCIA[hp].includes(novo) && !atuais.includes(novo)) corpo.comportamentos = ordenados(hp, [...atuais, novo])
+    setRotulos(r => ({ ...r, [id]: { ...(r[id] || {}), ...corpo } }))
+    grava(id, corpo)
+  }, [rotuloDe, rotulos, porId, grava])
+
+  const alterna = useCallback((id, classe) => {
+    const hp = porId[id].honeypot
+    const atuais = rotulos[id]?.comportamentos || []
+    if (classe === rotuloDe(id) && atuais.includes(classe)) return  // a principal fica marcada
+    const lista = ordenados(hp, atuais.includes(classe) ? atuais.filter(c => c !== classe) : [...atuais, classe])
+    setRotulos(r => ({ ...r, [id]: { ...(r[id] || {}), comportamentos: lista } }))
+    grava(id, { comportamentos: lista })
+  }, [rotuloDe, rotulos, porId, grava])
 
   const anota = (id, texto) => {
     setRotulos(r => ({ ...r, [id]: { ...(r[id] || {}), observacao: texto } }))
@@ -226,7 +248,9 @@ export default function Rotulagem() {
     const aoTeclar = ev => {
       if (ev.target.closest?.('textarea, input, select') || ev.ctrlKey || ev.metaKey || ev.altKey) return
       const classes = CLASSES[atual.honeypot] || []
-      if (/^[1-9]$/.test(ev.key) && Number(ev.key) <= classes.length) marca(atual.id, classes[Number(ev.key) - 1][0])
+      const digito = /^Digit([1-9])$/.exec(ev.code)
+      if (ev.shiftKey && digito && Number(digito[1]) <= classes.length) alterna(atual.id, classes[Number(digito[1]) - 1][0])
+      else if (/^[1-9]$/.test(ev.key) && Number(ev.key) <= classes.length) marca(atual.id, classes[Number(ev.key) - 1][0])
       else if (ev.key === '0') marca(atual.id, 'fora_da_taxonomia')
       else if (ev.key === 'i' || ev.key === 'I') marca(atual.id, 'inconclusivo')
       else if (ev.key === 'ArrowRight' || ev.key === 'j') vai(idx + 1)
@@ -237,7 +261,7 @@ export default function Rotulagem() {
     }
     window.addEventListener('keydown', aoTeclar)
     return () => window.removeEventListener('keydown', aoTeclar)
-  }, [atual, idx, marca, vai, proximaPendente])
+  }, [atual, idx, marca, alterna, vai, proximaPendente])
 
   if (!sessoes) {
     return erro
@@ -257,6 +281,9 @@ export default function Rotulagem() {
   const contagem = {}
   atual.eventos.forEach(e => { const k = evNome(atual.honeypot, e); contagem[k] = (contagem[k] || 0) + 1 })
   const escolhido = rotuloDe(atual.id)
+  const comportamentos = rotulos[atual.id]?.comportamentos || []
+  const maisGrave = comportamentos[0]
+  const foraDaPrecedencia = escolhido && PRECEDENCIA[atual.honeypot].includes(escolhido) && maisGrave && maisGrave !== escolhido
 
   return (
     <div className="rot">
@@ -344,7 +371,8 @@ export default function Rotulagem() {
           </section>
 
           <section className="rot-decisao">
-            <h3>Sua decisão</h3>
+            <h3>Classe principal</h3>
+            <p className="rot-nota">Uma só. Se a sessão tiver vários comportamentos, a principal é o mais grave: {PRECEDENCIA[atual.honeypot].join(' › ')}.</p>
             <div className="rot-classes">
               {CLASSES[atual.honeypot].map(([id, def], i) => (
                 <button key={id} className="rot-classe" aria-pressed={escolhido === id} onClick={() => marca(atual.id, id)}>
@@ -359,6 +387,22 @@ export default function Rotulagem() {
                 </button>
               ))}
             </div>
+            <fieldset className="rot-comportamentos">
+              <legend>Todos os comportamentos observados <small>marque cada um que aparece nos eventos · Shift+número</small></legend>
+              {CLASSES[atual.honeypot].map(([id], i) => (
+                <label key={id} className={comportamentos.includes(id) ? 'on' : ''}>
+                  <input type="checkbox" checked={comportamentos.includes(id)} disabled={id === escolhido && comportamentos.includes(id)} onChange={() => alterna(atual.id, id)} />
+                  <span className="mono">{id}</span>
+                </label>
+              ))}
+            </fieldset>
+            {foraDaPrecedencia && (
+              <div className="notice rot-precedencia" role="status">
+                <AlertCircle size={16} />
+                <span>Pela precedência, a classe principal seria <strong className="mono">{maisGrave}</strong>, o comportamento mais grave marcado.</span>
+                <button className="secondary-button" onClick={() => marca(atual.id, maisGrave)}>Usar {maisGrave}</button>
+              </div>
+            )}
             <label className="rot-obs">
               <span>Observação (opcional): o que pesou na decisão, divergências entre contagem e evento</span>
               <textarea value={rotulos[atual.id]?.observacao || ''} maxLength={2000} onChange={ev => anota(atual.id, ev.target.value)} />
@@ -369,7 +413,7 @@ export default function Rotulagem() {
                 <button className="secondary-button" onClick={() => vai(idx + 1)} disabled={idx >= ordem.length - 1}>Próxima <ChevronRight size={15} /></button>
                 <button className="primary-button" onClick={proximaPendente} disabled={feitas === ordem.length}><SkipForward size={15} /> Próxima sem rótulo</button>
               </div>
-              <span className="rot-atalhos"><kbd>1</kbd>–<kbd>{CLASSES[atual.honeypot].length}</kbd> classe · <kbd>0</kbd> nenhuma · <kbd>i</kbd> inconclusivo · <kbd>←</kbd><kbd>→</kbd> navegar · <kbd>n</kbd> próxima sem rótulo</span>
+              <span className="rot-atalhos"><kbd>1</kbd>–<kbd>{CLASSES[atual.honeypot].length}</kbd> classe · <kbd>⇧</kbd>+<kbd>n°</kbd> comportamento · <kbd>0</kbd> nenhuma · <kbd>i</kbd> inconclusivo · <kbd>←</kbd><kbd>→</kbd> navegar · <kbd>n</kbd> próxima sem rótulo</span>
             </div>
           </section>
         </article>

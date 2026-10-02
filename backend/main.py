@@ -380,8 +380,9 @@ def unblock(ip: str):
 # ── rotulagem cega (ver backend/rotulagem.py) ────────────────────────────────
 
 class RotuloRequest(BaseModel):
-    rotulo:     Optional[str] = Field(None, max_length=40)
-    observacao: Optional[str] = Field(None, max_length=rotulagem.MAX_OBSERVACAO)
+    rotulo:         Optional[str] = Field(None, max_length=40)
+    comportamentos: Optional[list[str]] = Field(None, max_length=10)
+    observacao:     Optional[str] = Field(None, max_length=rotulagem.MAX_OBSERVACAO)
 
 
 def _rotulagem(funcao, *args):
@@ -410,7 +411,8 @@ def rotulagem_do_revisor(revisor: str):
 
 @api_router.put("/api/rotulagem/{revisor}/{session_id}")
 def rotulagem_marca(revisor: str, session_id: str, body: RotuloRequest):
-    return _rotulagem(rotulagem.marca, revisor, session_id, body.rotulo, body.observacao)
+    return _rotulagem(rotulagem.marca, revisor, session_id, body.rotulo, body.observacao,
+                      body.comportamentos)
 
 
 app.include_router(api_router)

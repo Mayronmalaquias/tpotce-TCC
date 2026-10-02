@@ -82,6 +82,21 @@ class TesteRotulagem(unittest.TestCase):
         rotulagem.marca("mayron", "c1", "", None)
         self.assertEqual(rotulagem.rotulos_de("mayron")["rotulos"]["c1"]["rotulo"], "")
 
+    def test_comportamentos_ficam_na_ordem_de_precedencia_e_nao_apagam_rotulo(self):
+        rotulagem.marca("mayron", "c1", "malware_download", None)
+        rotulagem.marca("mayron", "c1", None, None, ["recon", "malware_download", "command_injection"])
+        e = rotulagem.rotulos_de("mayron")["rotulos"]["c1"]
+        self.assertEqual(e["rotulo"], "malware_download")
+        self.assertEqual(e["comportamentos"], ["malware_download", "command_injection", "recon"])
+        rotulagem.marca("mayron", "c1", None, None, [])
+        self.assertEqual(rotulagem.rotulos_de("mayron")["rotulos"]["c1"]["comportamentos"], [])
+
+    def test_recusa_comportamento_de_outro_honeypot_ou_especial(self):
+        with self.assertRaises(rotulagem.RotuloInvalido):
+            rotulagem.marca("mayron", "d1", None, None, ["recon"])
+        with self.assertRaises(rotulagem.RotuloInvalido):
+            rotulagem.marca("mayron", "c1", None, None, ["inconclusivo"])
+
     def test_sem_evidencias_fica_indisponivel(self):
         (rotulagem.DIR_AVALIACAO / "evidencias_revisao.json").unlink()
         rotulagem._cache.clear()

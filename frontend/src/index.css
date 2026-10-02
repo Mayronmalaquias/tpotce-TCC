@@ -191,4 +191,15 @@ button svg, .notice svg { flex-shrink: 0; }
 .rot-revisor small { display: block; color: var(--muted); font-size: 11px; margin-top: 3px; }
 .rot-regras { margin: 4px 0 0; padding-left: 18px; display: flex; flex-direction: column; gap: 8px; color: #aab2bf; font-size: 12.5px; line-height: 1.5; }
 .rot-regras strong { color: #e7ebf1; }
+.rot-regras code { font-family: ui-monospace, "Cascadia Code", monospace; font-size: .92em; }
+.rot-comportamentos { border: 1px solid #2a313b; border-radius: 8px; padding: 10px 12px 12px; margin: 0; display: flex; flex-wrap: wrap; gap: 8px; }
+.rot-comportamentos legend { padding: 0 6px; font-size: 12px; font-weight: 600; color: #d7dce4; }
+.rot-comportamentos legend small { font-weight: 400; color: #77808f; margin-left: 6px; }
+.rot-comportamentos label { display: inline-flex; align-items: center; gap: 7px; border: 1px solid #2a313b; background: #161b22; border-radius: 6px; padding: 6px 10px; font-size: 12px; color: #c3c9d3; cursor: pointer; }
+.rot-comportamentos label.on { border-color: #6b5a2c; background: #241f12; color: #f1dfb5; }
+.rot-comportamentos input { accent-color: #edb84b; margin: 0; }
+.rot-comportamentos .mono { font-family: ui-monospace, "Cascadia Code", monospace; }
+.rot-precedencia { flex-wrap: wrap; font-size: 12px; }
+.rot-precedencia .mono { font-family: ui-monospace, "Cascadia Code", monospace; }
+.rot-precedencia button { margin-left: auto; padding: 6px 10px; }
 @media (max-width: 900px) { .rot-mesa { grid-template-columns: minmax(0, 1fr); } .rot-fila { display: none; } .rot-salto { display: flex; } .rot-atalhos { display: none; } .rot-ficha > section { padding: 14px; } }

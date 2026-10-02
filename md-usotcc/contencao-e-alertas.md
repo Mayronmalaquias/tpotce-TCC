@@ -323,6 +323,7 @@ já exposto, não uma instalação atestada como limpa.
 | 10/09/2026 ~16:48 | segundos | reinício da contenção propagou restart ao Docker |
 | 10/09/2026 17:07:14 – 17:07:45 | ~31 s | reboot planejado da VM |
 | 02/10/2026 18:32:57 – 18:33:03 | ~5 s | reinício do backend para implantar a tela de rotulagem. Os honeypots seguiram gravando o log bruto; o banco perdeu os eventos desses segundos e as sessões abertas no momento (o `LogWatcher` recomeça do fim do arquivo) |
+| 02/10/2026 19:14:18 – 19:14:30 | ~12 s | reinício do backend para implantar os comportamentos múltiplos na rotulagem; mesmo efeito do reinício anterior (só o banco, o log bruto segue completo). Ingestão confirmada às 19:18:19 |
 | 02/10/2026 ~18:32 – 18:36:57 | ~5 min | só o **dashboard** fora do ar (403), sem efeito na coleta: o `git pull` removeu a pasta `frontend/dist`, e o bind mount do nginx ficou preso à pasta apagada. Resolvido com `docker restart nginx` |
 
 Ingestão confirmada depois do reboot: os honeypots voltaram a escrever log e o

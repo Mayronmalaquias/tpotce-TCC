@@ -37,6 +37,15 @@ class IntegrityTests(unittest.TestCase):
             (state / 'baseline.json').write_text('{}')
             run('check', 2)
 
+    def test_volatile_content_ignored_but_metadata_checked(self):
+        from host_integrity import differs
+        grubenv = '/boot/grub2/grubenv'
+        old = dict(kind='file', mode=0o600, uid=0, gid=0, sha256='a', size=1024)
+        self.assertFalse(differs(grubenv, old, dict(old, sha256='b')))
+        self.assertTrue(differs(grubenv, old, dict(old, mode=0o644)))
+        self.assertTrue(differs(grubenv, old, dict(old, uid=1000)))
+        self.assertTrue(differs('/etc/passwd', old, dict(old, sha256='b')))
+
     @unittest.skipIf(sys.platform == 'win32', 'Linux metadata and symlinks')
     def test_metadata_symlink_and_read_failure(self):
         from host_integrity import inventory

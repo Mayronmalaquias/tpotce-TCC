@@ -17,6 +17,17 @@ import tempfile
 ROOTS = ['/usr/bin', '/usr/sbin', '/usr/lib', '/usr/lib64', '/usr/libexec', '/usr/local',
          '/bin', '/sbin', '/lib', '/lib64', '/boot', '/etc',
          '/root/.ssh', '/var/spool/cron', '/opt/beeia-security']
+# Rewritten by the OS in normal operation: grub-boot-success.timer sets
+# boot_success=1 two minutes after any user login. Content is ignored, but
+# kind, owner and permissions are still compared.
+VOLATILE_CONTENT = {'/boot/grub2/grubenv'}
+
+
+def differs(path, old, new):
+    if path in VOLATILE_CONTENT:
+        old, new = ({k: v for k, v in item.items() if k not in ('sha256', 'size')}
+                    for item in (old, new))
+    return old != new
 
 
 def now():
@@ -126,7 +137,7 @@ def main():
     changes = {kind: sorted(paths) for kind, paths in {
         'added': current.keys() - old.keys(),
         'removed': old.keys() - current.keys(),
-        'modified': {p for p in current.keys() & old.keys() if current[p] != old[p]},
+        'modified': {p for p in current.keys() & old.keys() if differs(p, old[p], current[p])},
     }.items()}
     status = 'error' if errors else ('changed' if any(changes.values()) else 'unchanged')
     report = dict(checked_at=now(), status=status, baseline_created_at=saved['created_at'],

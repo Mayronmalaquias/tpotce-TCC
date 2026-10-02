@@ -269,6 +269,28 @@ def watchdog(config, state):
     print(json.dumps(report))
 
 
+FAILURE_REMINDER_SECONDS = 21600
+
+
+def notify_failure(config, state, unit, now):
+    """Hourly timers re-fail every hour; email once per unit per reminder window."""
+    marker = state / ('notify-' + ''.join(c if c.isalnum() or c in '.-_' else '_' for c in unit) + '.json')
+    last_sent = read_report(marker).get('last_sent_at')
+    try:
+        if last_sent and (now - dt.datetime.fromisoformat(last_sent)).total_seconds() < FAILURE_REMINDER_SECONDS:
+            print('Failure already notified at ' + last_sent + '; suppressed until reminder window')
+            return False
+    except (TypeError, ValueError):
+        pass
+    publish(config, 'BeeIA: falha de servico',
+            'Falha no servico ' + unit + '. Consulte o journal da VM.\nHost: ' +
+            config['instance_id'] + '\nUTC: ' + now.isoformat() +
+            '\nNovas falhas desta unidade so serao reenviadas apos 6 h.')
+    atomic_json(marker, {'unit': unit, 'last_sent_at': now.isoformat()})
+    print('Notification accepted by SNS; delivery requires confirmed email subscriptions')
+    return True
+
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('action', choices=['backup', 'watch', 'notify-failure', 'test-alert'])
@@ -284,11 +306,11 @@ def main():
             backup(config, state)
         elif args.action == 'watch':
             watchdog(config, state)
+        elif args.action == 'notify-failure':
+            notify_failure(config, state, args.unit, utcnow())
         else:
-            test = args.action == 'test-alert'
-            publish(config, 'BeeIA: ' + ('teste de notificacao' if test else 'falha de servico'),
-                    ('Teste solicitado de entrega dos alertas de seguranca e backup.' if test else
-                     'Falha no servico ' + args.unit + '. Consulte o journal da VM.') +
+            publish(config, 'BeeIA: teste de notificacao',
+                    'Teste solicitado de entrega dos alertas de seguranca e backup.' +
                     '\nHost: ' + config['instance_id'] + '\nUTC: ' + utcnow().isoformat())
             print('Notification accepted by SNS; delivery requires confirmed email subscriptions')
     except Exception as exc:

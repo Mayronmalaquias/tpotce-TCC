@@ -457,6 +457,59 @@ Build refeito e publicado em `frontend/dist` na VM em 10/09/2026 às 17:52 UTC;
 o container `nginx` serve esse diretório por bind mount, sem precisar reiniciar.
 Bundles antigos que tinham ficado para trás no diretório foram removidos.
 
+### Alerta falso-positivo repetido: `grubenv` — 24/09 a 02/10/2026
+
+**O que foi observado.** De 24/09/2026 17:01 UTC até 02/10/2026, o
+`beeia-integrity.service` falhou em toda execução horária (191 falhas), sempre
+com uma única diferença: `modified: ["/boot/grub2/grubenv"]`. Cada falha disparou
+`beeia-notify-failure@` (um email por hora), e o watchdog repetiu
+`integrity_not_ok` a cada 6 h.
+
+**Causa, confirmada no journal.** Às 16:35:25 UTC de 24/09 houve login SSH
+administrativo, a partir do IP do administrador. A sessão de usuário iniciou o
+`grub-boot-success.timer` do Amazon Linux, que às 16:38:23 executou
+`grub-boot-success.service` e gravou `boot_success=1` no `grubenv`. A data de
+modificação do arquivo é exatamente 16:38:23. Não houve reboot (último boot em
+10/09 17:07) nem instalação de pacote (último `dnf` em 10/09). O arquivo
+contém apenas `boot_success=1` e `boot_indeterminate=0`.
+
+Isso vai acontecer **em todo login SSH** depois de um boot: não é invasão, é o
+sistema operacional marcando o boot como bem-sucedido.
+
+**Correções aplicadas em 02/10/2026:**
+
+1. `host_integrity.py`: `/boot/grub2/grubenv` passou a ter **conteúdo volátil**.
+   Hash e tamanho dele são ignorados na comparação, mas tipo, dono, grupo e
+   permissões continuam sendo verificados. Todos os outros arquivos seguem
+   regra integral.
+2. `security_operations.py notify-failure`: no máximo **um email por unidade a
+   cada 6 h**, mesmo intervalo de lembrete do watchdog. Timers horários deixam de
+   gerar um email por hora para a mesma falha.
+3. Foi junto para a VM a lista de pastas do backup que já estava no repositório
+   desde o fechamento da coleta (`data_pipeline`, `data/avaliacao`,
+   `data/captura_real`) e ainda não tinha sido implantada.
+
+Testes: `test_host_integrity.py` (novo caso para conteúdo volátil versus
+metadados) e `test_security_operations.py` (limite por unidade, janela de 6 h,
+marcador corrompido não bloqueia alerta). Os 5 passaram na VM antes da instalação.
+
+**Renovação da referência**, seguindo o mesmo procedimento de 10/09:
+
+1. Scripts instalados às 15:04 UTC. O `check` seguinte acusou **somente** os dois
+   scripts alterados, e o `grubenv` não apareceu mais.
+2. Backup externo às 15:04:38 UTC, levando ao S3 a referência antiga e os
+   relatórios (`.../backup-20261002T150438179163Z.tar.gz`, 31.961.675 bytes,
+   19.156 linhas no banco, `restore_verified: true`).
+3. Referência antiga preservada na VM como
+   `/var/lib/beeia-integrity/baseline-arquivada-20261002T150526Z.json`
+   (SHA-256 `00e1c5ee8970b6de4112b7104876073c97a5213d68473c213fc96158492063f0`).
+4. Nova referência criada às 15:05:57 UTC: 35.447 entradas, SHA-256
+   `843bfbbcb3f738b43170f7fec2d24bb5bf24d9fb401939c9826db5f0c4918f1a`.
+5. `check` seguinte: `status=unchanged`, saída 0. Watchdog às 15:06:45 UTC:
+   `problems: []` e mensagem de recuperação publicada.
+
+A coleta não foi interrompida: nenhuma etapa reiniciou Docker ou honeypots.
+
 ---
 
 ## 4. Comandos de operação

@@ -11,6 +11,8 @@ Endpoints REST:
   GET  /api/report          ?hours (relatório em linguagem natural via LLM)
   POST /api/block/{ip}
   DEL  /api/block/{ip}
+  GET  /api/rotulagem/sessoes | /api/rotulagem/progresso | /api/rotulagem/{revisor}
+  PUT  /api/rotulagem/{revisor}/{session_id}   (revisao cega, ver rotulagem.py)
 
 WebSocket:
   WS /ws  → emite { type: "new_attack"|"stats", data: {...} }
@@ -44,6 +46,7 @@ import database
 import firewall
 import geo
 import llm
+import rotulagem
 from auth import (auth_enabled, configured_key, login_enabled, require_api_key,
                   verify_login, ws_key_is_valid)
 from classifier import classifier as cowrie_classifier
@@ -372,6 +375,42 @@ def unblock(ip: str):
     if ok:
         database.unblock_ip(ip)
     return {"success": ok, "message": msg}
+
+
+# ── rotulagem cega (ver backend/rotulagem.py) ────────────────────────────────
+
+class RotuloRequest(BaseModel):
+    rotulo:     Optional[str] = Field(None, max_length=40)
+    observacao: Optional[str] = Field(None, max_length=rotulagem.MAX_OBSERVACAO)
+
+
+def _rotulagem(funcao, *args):
+    try:
+        return funcao(*args)
+    except rotulagem.RotulagemIndisponivel as e:
+        raise HTTPException(status_code=503, detail=str(e))
+    except rotulagem.RotuloInvalido as e:
+        raise HTTPException(status_code=422, detail=str(e))
+
+
+@api_router.get("/api/rotulagem/sessoes")
+def rotulagem_sessoes():
+    return {"sessoes": _rotulagem(rotulagem.sessoes)}
+
+
+@api_router.get("/api/rotulagem/progresso")
+def rotulagem_progresso():
+    return _rotulagem(rotulagem.progresso)
+
+
+@api_router.get("/api/rotulagem/{revisor}")
+def rotulagem_do_revisor(revisor: str):
+    return _rotulagem(rotulagem.rotulos_de, revisor)
+
+
+@api_router.put("/api/rotulagem/{revisor}/{session_id}")
+def rotulagem_marca(revisor: str, session_id: str, body: RotuloRequest):
+    return _rotulagem(rotulagem.marca, revisor, session_id, body.rotulo, body.observacao)
 
 
 app.include_router(api_router)

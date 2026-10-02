@@ -1,5 +1,5 @@
 import { useEffect, useState, useCallback } from 'react'
-import { Wifi, WifiOff, RefreshCw, LayoutDashboard, Radar, Globe2, Sparkles, LogOut, ArrowUpRight, ShieldCheck, AlertCircle, ChevronRight } from 'lucide-react'
+import { Wifi, WifiOff, RefreshCw, LayoutDashboard, Radar, Globe2, Sparkles, LogOut, ArrowUpRight, ShieldCheck, AlertCircle, ChevronRight, Tags } from 'lucide-react'
 import Login, { Brand } from './components/Login'
 import Overview   from './components/Overview'
 import AttackFeed from './components/AttackFeed'
@@ -7,6 +7,7 @@ import Charts     from './components/Charts'
 import GeoMap     from './components/GeoMap'
 import Report     from './components/Report'
 import IpDetail   from './components/IpDetail'
+import Rotulagem  from './components/Rotulagem'
 import { useWebSocket } from './hooks/useWebSocket'
 import { authFetch, getSession, saveSession, clearSession } from './lib/api'
 
@@ -33,12 +34,14 @@ const NAV = [
   { id: 'attacks', label: 'Ataques', icon: Radar },
   { id: 'map', label: 'Mapa de ameaças', icon: Globe2 },
   { id: 'reports', label: 'Relatórios com IA', icon: Sparkles },
+  { id: 'rotulagem', label: 'Rotulagem', icon: Tags },
 ]
 const TITLES = {
   overview: ['Visão geral', 'Toda a atividade do seu ambiente, em um só lugar.'],
   attacks: ['Central de ataques', 'Investigue as sessões detectadas e gerencie bloqueios.'],
   map: ['Mapa de ameaças', 'Explore a origem geográfica dos ataques registrados.'],
   reports: ['Inteligência de ameaças', 'Transforme os eventos do ambiente em análises com IA.'],
+  rotulagem: ['Rotulagem cega', 'Classifique cada sessão da amostra sem ver a previsão do modelo.'],
 }
 
 function Dashboard({ onLogout }) {
@@ -157,6 +160,7 @@ function Dashboard({ onLogout }) {
           {page === 'attacks' && <AttackFeed attacks={attacks} onBlock={handleBlock} onInspect={setInspectedIp} />}
           {page === 'map' && <GeoMap geoData={geoData} />}
           {page === 'reports' && <Report />}
+          {page === 'rotulagem' && <Rotulagem />}
           <IpDetail ip={inspectedIp} onClose={() => setInspectedIp(null)} onBlock={handleBlock} />
           <footer className="dashboard-footer"><span>BeeIA / Threat Intelligence</span><span>{updatedAt ? `Última sincronização às ${updatedAt.toLocaleTimeString('pt-BR')}` : 'Aguardando sincronização'}</span></footer>
         </main>

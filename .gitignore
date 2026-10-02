@@ -39,6 +39,9 @@ data/captura_real/*
 data/avaliacao/*
 !data/avaliacao/*.csv
 !data/avaliacao/*.json
+# Eventos brutos da amostra (senhas tentadas, comandos e URLs de malware): o
+# repositorio e publico, entao ficam so na VM e no backup externo.
+data/avaliacao/evidencias_revisao.json
 
 # Log transitorio das rodadas do harness experimental
 ml/experiments/run.log

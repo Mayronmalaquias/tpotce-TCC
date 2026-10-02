@@ -18,8 +18,22 @@ O que reporta, e por que
   concordancia         entre os dois revisores. F1 alto sobre rotulagem em que
                        os proprios humanos discordam nao significa muito.
 
+Cowrie e Dionaea sao DOIS modelos com taxonomias diferentes: apure cada um
+com --honeypot. Uma matriz unica mistura os dois e o macro-F1 resultante nao
+descreve nenhum deles.
+
+Rotulos especiais da revisao:
+  inconclusivo        de qualquer revisor tira a sessao do calculo.
+  fora_da_taxonomia   o revisor viu que nenhuma classe do modelo descreve a
+                      sessao (ex.: conexao aberta e fechada, sem login). Com
+                      --fora-da-taxonomia excluir (padrao) ela sai do calculo
+                      e e contada; com `classe` vira classe real que o modelo
+                      nunca preve, e conta como erro. Reporte os dois.
+
 Uso:
-    python data_pipeline/avaliar_amostra.py --amostra data/avaliacao
+    python data_pipeline/avaliar_amostra.py --amostra data/avaliacao --honeypot cowrie
+    python data_pipeline/avaliar_amostra.py --amostra data/avaliacao --honeypot cowrie \\
+        --fora-da-taxonomia classe
 """
 from __future__ import annotations
 
@@ -32,6 +46,8 @@ import sys
 
 # Abaixo disto a metrica por classe e ruido; o relatorio marca a classe.
 SUPORTE_MINIMO = 10
+INCONCLUSIVO = "inconclusivo"
+FORA_DA_TAXONOMIA = "fora_da_taxonomia"
 
 
 def carrega(caminho: Path) -> list[dict]:
@@ -50,7 +66,8 @@ def consolida_rotulos(revisao: list[dict]) -> dict:
     for linha in revisao:
         sid = _limpo(linha.get("session_id"))
         r1, r2 = _limpo(linha.get("rotulo_revisor1")), _limpo(linha.get("rotulo_revisor2"))
-        if _limpo(linha.get("inconclusivo")).lower() in ("1", "sim", "true", "x"):
+        if (_limpo(linha.get("inconclusivo")).lower() in ("1", "sim", "true", "x")
+                or INCONCLUSIVO in (r1, r2)):
             inconclusivas.append(sid)
             continue
         if not r1 and not r2:
@@ -124,6 +141,10 @@ def main() -> int:
     ap.add_argument("--json", type=Path)
     ap.add_argument("--somente-ip-novo", action="store_true",
                     help="ignora sessoes cujo IP ja aparecia no treino")
+    ap.add_argument("--honeypot", choices=["cowrie", "dionaea"],
+                    help="apura so um modelo (recomendado: rode uma vez para cada)")
+    ap.add_argument("--fora-da-taxonomia", choices=["excluir", "classe"], default="excluir",
+                    help="excluir: tira do calculo; classe: conta como classe que o modelo erra")
     args = ap.parse_args()
 
     revisao_csv = args.amostra / "revisao_cega.csv"
@@ -134,6 +155,8 @@ def main() -> int:
             return 2
 
     revisao = carrega(revisao_csv)
+    if args.honeypot:
+        revisao = [l for l in revisao if _limpo(l.get("honeypot")) == args.honeypot]
     previsoes = {l["session_id"]: l for l in carrega(previsoes_csv)}
     consolidado = consolida_rotulos(revisao)
     verdade = consolidado["verdade"]
@@ -150,11 +173,15 @@ def main() -> int:
         print("\n  Nenhum numero de desempenho pode ser reportado ate la.\n")
         return 1
 
-    pares, ignoradas_ip = [], 0
+    pares, ignoradas_ip, fora = [], 0, 0
     for sid, real in verdade.items():
         previsao = previsoes.get(sid)
         if not previsao:
             continue
+        if real == FORA_DA_TAXONOMIA:
+            fora += 1
+            if args.fora_da_taxonomia == "excluir":
+                continue
         if args.somente_ip_novo and previsao.get("ip_visto_no_treino") == "1":
             ignoradas_ip += 1
             continue
@@ -169,11 +196,15 @@ def main() -> int:
     concordancia = round(consolidado["concordaram"] / dupla, 4) if dupla else None
 
     print("=" * 66)
-    print("  DESEMPENHO EM SESSOES REAIS")
+    print("  DESEMPENHO EM SESSOES REAIS" + (f" — {args.honeypot}" if args.honeypot else ""))
     print("=" * 66)
+    if not args.honeypot:
+        print("  ATENCAO: Cowrie e Dionaea misturados; use --honeypot para cada modelo")
     print(f"  sessoes avaliadas       : {m['n']}")
     print(f"  inconclusivas (fora)    : {len(consolidado['inconclusivas'])}")
     print(f"  discordancias (fora)    : {len(consolidado['discordancias'])}")
+    trata = "excluidas" if args.fora_da_taxonomia == "excluir" else "contadas como classe"
+    print(f"  fora da taxonomia       : {fora} ({trata})")
     if concordancia is not None:
         print(f"  concordancia entre revisores: {concordancia:.2%} de {dupla} sessoes")
     if args.somente_ip_novo:
@@ -201,6 +232,8 @@ def main() -> int:
 
     if args.json:
         saida = {"gerado_em": dt.datetime.now(dt.timezone.utc).isoformat(),
+                 "honeypot": args.honeypot, "fora_da_taxonomia": {
+                     "tratamento": args.fora_da_taxonomia, "sessoes": fora},
                  "concordancia_entre_revisores": concordancia,
                  "inconclusivas": consolidado["inconclusivas"],
                  "discordancias": consolidado["discordancias"], **m}

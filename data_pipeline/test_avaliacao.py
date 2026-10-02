@@ -91,6 +91,12 @@ class TesteConsolidacaoDeRotulos(unittest.TestCase):
         self.assertEqual(r["verdade"], {"s1": "a"})
         self.assertEqual(r["duplamente_revisadas"], 0)
 
+    def test_rotulo_inconclusivo_de_um_revisor_tira_a_sessao(self):
+        r = apuracao.consolida_rotulos([
+            {"session_id": "s1", "rotulo_revisor1": "inconclusivo", "rotulo_revisor2": "a"}])
+        self.assertEqual(r["verdade"], {})
+        self.assertEqual(r["inconclusivas"], ["s1"])
+
     def test_linha_em_branco_nao_inventa_rotulo(self):
         r = apuracao.consolida_rotulos([
             {"session_id": "s1", "rotulo_revisor1": "  ", "rotulo_revisor2": ""}])

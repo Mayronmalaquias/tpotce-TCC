@@ -30,17 +30,27 @@ shell, reconhecimento, varredura de portas, exploits, download de malware).
 menos urgente.
 
 Seja direto e baseie-se apenas nos dados fornecidos. Não invente números. Se os dados forem \
-insuficientes, diga isso claramente."""
+insuficientes, diga isso claramente.
+
+Atenção a dois pontos dos dados:
+- Só "Ataques no período" se refere ao período analisado. Todos os outros números são do \
+histórico completo da coleta. Nunca os atribua ao período; ao citá-los, diga que são do histórico.
+- O bloqueio automático de IPs está desligado de propósito: isto é um honeypot de pesquisa, e \
+bloquear o atacante interromperia a coleta. Zero IPs bloqueados é esperado, não uma falha. Não \
+recomende ligar o bloqueio no honeypot; se falar de bloqueio, aplique-o às redes de produção \
+que os gestores protegem."""
 
 
 def _build_prompt(data: dict) -> str:
     """Monta o prompt de usuário a partir dos dados agregados do banco."""
     lines = [
         f"Período analisado: últimas {data['period_hours']} horas.",
-        f"Total de ataques (histórico completo): {data['total_attacks']}",
         f"Ataques no período: {data['attacks_period']}",
+        "",
+        "Daqui em diante, todos os números são do HISTÓRICO COMPLETO da coleta, não do período:",
+        f"Total de ataques: {data['total_attacks']}",
         f"IPs únicos: {data['unique_ips']}",
-        f"IPs bloqueados automaticamente: {data['blocked_count']}",
+        f"IPs bloqueados: {data['blocked_count']} (bloqueio automático desligado de propósito)",
         "",
         "Distribuição por honeypot de origem:",
     ]
